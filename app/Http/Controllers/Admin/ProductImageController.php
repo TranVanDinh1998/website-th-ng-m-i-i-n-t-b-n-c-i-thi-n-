@@ -3,384 +3,321 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Support\Facades\DB;
-use App\product_image;
-use App\Collection;
-use App\ProductImage;
-use App\Product;
+use App\Http\Helpers\RemoveImage;
+use App\Http\Helpers\UploadImage;
+use App\Http\Requests\GeneralRequest;
+use App\Http\Requests\ImageRequest;
+use App\Models\Product;
+use App\Models\ProductImage;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\File;
-use Illuminate\Support\MessageBag;
-use Illuminate\Support\Str;
-
-
 
 class ProductImageController extends Controller
 {
-    public function __construct()
+    // contructor
+    public function __construct(Product $product, ProductImage $productImage)
     {
+        $this->product = $product;
         $this->middleware('auth:admin');
+        $this->productImage = $productImage;
     }
+    /**
+     * Display a listing of the resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
     public function index($id, Request $request)
     {
-        $product =  Product::find($id);
-        $product_images = ProductImage::notDelete()->where('product_id', $id)
-            ->sortId($request)->status($request);
-
-        $count_image = 0;
-        $view = 0;
-        $count_image = $product_images->count();
-        if ($request->has('view')) {
-            $view = $request->view;
-        } else {
-            $view = 10;
-        }
-        $product_images = $product_images->paginate($view);
-
-        // user
-        $user = Auth::guard('admin')->user();
-        // filter
+        // parameter
         $sort_id = $request->sort_id;
         $status = $request->status;
-
-        return view('admin.gallery.index', [
+        // search
+        $search = $request->search;
+        // view
+        $view = $request->has('view') ? $request->view : 10;
+        // data
+        $product = $this->product->find($id);
+        $productImages = $product->images()->withoutTrashed();
+        $productImages_count = $productImages->count();
+        $productImages = $productImages->paginate($view);
+        return view('pages.admin.gallery.index', [
+            'productImages' => $productImages,
             'product' => $product,
-            'count_image' => $count_image,
-            'product_images' => $product_images,
-            'view' => $view,
-            //
-            'current_user' => $user,
-            // filter
+            // parameter
             'sort_id' => $sort_id,
+            'search' => $search,
             'status' => $status,
+            'search' => $search,
+            'view' => $view,
+            'productImages_count' => $productImages_count,
         ]);
     }
 
-    public function doActivate($id, $image_id)
+    /**
+     * Verify an item.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function verify($id,$image_id, $verified)
     {
-        $product_image = ProductImage::find($image_id);
-        $product_image->is_actived = 1;
-        if ($product_image->save()) {
-            return back()->with('success', 'Image #' . $product_image->id . ' has been activated.');
-        } else {
-            return back()->with('error', 'Error occurred!');
-        }
+        //
+        $verify = $this->productImage->find($image_id)->update([
+            'verified' => $verified,
+        ]);
+        if ($verified == 0)
+            return back()->with('success', 'Hình ảnh #' . $image_id . ' đã được tắt .');
+        else
+            return back()->with('success', 'Hình ảnh #' . $image_id . ' đã được bật.');
     }
 
-    public function doDeactivate($id, $image_id)
+    /**
+     * Show the form for creating a new resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function create($id)
     {
-        $product_image = ProductImage::find($image_id);
-        $product_image->is_actived = 0;
-        if ($product_image->save()) {
-            return back()->with('success', 'Image #' . $product_image->id . ' has been deactivated.');
-        } else {
-            return back()->with('error', 'Error occurred!');
-        }
-    }
-
-    public function add($id)
-    {
-        $product =  Product::find($id);
-        // user
-        $user = Auth::guard('admin')->user();
-        return view('admin.gallery.add', [
+        //
+        $product = $this->product->find($id);
+        return view('pages.admin.gallery.create', [
             'product' => $product,
-            //
-            'current_user' => $user,
         ]);
     }
 
-    public function doAdd($id,Request $request)
+    /**
+     * Store a newly created resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\Response
+     */
+    public function store($id,ImageRequest $request, UploadImage $uploadImage)
     {
-        // return $request->all();
-
-        $validate = Validator::make(
-            $request->all(),
-            [
-                'image' => 'required|image',
-            ],
-            [
-                'required' => ':attribute must be filled',
-                'image' => ':attribute must be an image'
-            ]
-        );
-        if ($validate->fails()) {
-            return response()->json([
-                'error' => true,
-                'message' => $validate->errors(),
-            ]);
-        } else {
-            $product_image = new ProductImage();
-            $product_image->product_id = $id;
-            $result = $product_image->save();
-            if ($result) {
-                $path = public_path('uploads/products-images/' .  $product_image->product_id);
-                if (!File::isDirectory($path)) {
-                    File::makeDirectory($path, 0777, true, true);
-                }
-                if ($request->hasFile('image')) {
-                    $file = $request->file('image');
-                    $format = $file->getClientOriginalExtension();
-                    if ($format != 'jpg' && $format != 'png' && $format != 'jpeg') {
-                        $errors = new MessageBag(['errorImage' => 'File is not an image!']);
-                        return response()->json([
-                            'error' => true,
-                            'message' => $errors,
-                        ]);
-                    }
-                    $name = $file->getClientOriginalName();
-                    $avatar = Str::random(4) . "_" . $name;
-                    while (file_exists("/uploads/products-images/" . $product_image->product_id . "/" . $avatar)) {
-                        $avatar = Str::random(4) . "_" . $name;
-                    }
-                    $file->move(public_path() . '/uploads/products-images/' . $product_image->product_id, $avatar);
-                    $product_image->image = $avatar;
-                } else {
-                    $product_image->image = null;
-                }
-                $result = $product_image->save();
-                return response()->json([
-                    'error' => false,
-                    'message' => 'Success'
-                ]);
-            } else {
-                $errors = new MessageBag(['errorAdd' => 'Error occurred!']);
-                return response()->json([
-                    'error' => true,
-                    'message' => $errors
-                ]);
-            }
+        //
+        $avatar = null;
+        if ($request->hasFile('image')) {
+            $avatar = $this->productImage->uploadImage($request->image, $uploadImage);
         }
+        $result = $this->productImage->create([
+            'product_id' => $id,
+            'image' => $avatar,
+        ]);
+        return $result ? back()->with('success', 'Hình ảnh mới được khởi tạo thành công.') : back()->with('error', 'Lỗi xảy ra trong quá trình khởi tạo Hình ảnh mới.');
     }
 
+    /**
+     * Display the specified resource.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function show($id)
+    {
+        //
+    }
+
+    /**
+     * Show the form for editing the specified resource.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
     public function edit($id,$image_id)
     {
-        $product =  Product::find($id);
-        $product_image = ProductImage::find($image_id);
-        // user
-        $user = Auth::guard('admin')->user();
-        return view('admin.gallery.edit', [
+        //
+        $product = $this->product->find($id);
+        $productImage = $this->productImage->find($image_id);
+        return view('pages.admin.gallery.edit', [
+            'productImage' => $productImage,
             'product' => $product,
-            'product_image'=> $product_image,
-            //
-            'current_user' => $user,
         ]);
     }
 
-    public function doEdit($id,Request $request)
+    /**
+     * Update the specified resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function update(ImageRequest $request, $id,$image_id, UploadImage $uploadImage)
     {
-        // return $request->all();
-
-        $validate = Validator::make(
-            $request->all(),
-            [
-                'image' => 'required|image',
-            ],
-            [
-                'required' => ':attribute must be filled',
-                'image' => ':attribute must be an image'
-            ]
-        );
-        if ($validate->fails()) {
-            return response()->json([
-                'error' => true,
-                'message' => $validate->errors(),
-            ]);
+        //
+        $avatar = null;
+        $productImage = $this->productImage->find($image_id);
+        if ($request->hasFile('image')) {
+            $avatar = $this->productImage->uploadImage($request->image, $uploadImage);
         } else {
-            $product_image = ProductImage::find($request->image_id);
-            if ($request->hasFile('image')) {
-                $file = $request->file('image');
-                $format = $file->getClientOriginalExtension();
-                if ($format != 'jpg' && $format != 'png' && $format != 'jpeg') {
-                    $errors = new MessageBag(['errorImage' => 'File is not an image!']);
-                    return response()->json([
-                        'error' => true,
-                        'message' => $errors,
-                    ]);
-                }
-                $name = $file->getClientOriginalName();
-                $avatar = Str::random(4) . "_" . $name;
-                while (file_exists("/uploads/products-images/" . $product_image->product_id . "/" . $avatar)) {
-                    $avatar = Str::random(4) . "_" . $name;
-                }
-                $file->move(public_path() . '/uploads/products-images/' . $product_image->product_id, $avatar);
-                $product_image->image = $avatar;
-            }
-            $result = $product_image->save();
-            if ($result) {
-                return response()->json([
-                    'error' => false,
-                    'message' => 'Success'
-                ]);
-            } else {
-                $errors = new MessageBag(['errorEdit' => 'Error occurred!']);
-                return response()->json([
-                    'error' => true,
-                    'message' => $errors
-                ]);
-            }
+            $avatar = $productImage->image;
         }
+        $result = $productImage->update([
+            'image' => $avatar,
+        ]);
+        return $result ? back()->with('success', 'Hình ảnh #' . $image_id . ' đã được cập nhật.') : back()->with('error', 'Lỗi xảy ra khi cập nhật Hình ảnh #' . $image_id);
     }
 
-    public function doRemove($id, $image_id)
+    /**
+     * Softdelete the specified resource from storage.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function delete($id,$image_id)
     {
-        $product_image = ProductImage::find($image_id);
-        $product_image->is_deleted = 1;
-        if ($product_image->save()) {
-            return back()->with('success', 'Image #' . $product_image->id . ' has been removed.');
-        } else {
-            return back()->with('error', 'Error occurred!');
-        }
+        $productImage = $this->productImage->find($image_id);
+        $result = $productImage->delete();
+        return $result ? back()->withSuccess('Hình ảnh #' . $image_id . ' đã bị loại bỏ.') : back()->withError('Xảy ra lỗi khi loại bỏ Hình ảnh #' . $image_id);
     }
-    public function recycle($id,Request $request)
+
+
+    /**
+     * Display a listing of the softdeleted resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function recycle($id, Request $request)
     {
-        $product =  Product::find($id);
-        $product_images = ProductImage::softDelete()->where('product_id', $id)
-            ->sortId($request)->status($request);
-
-        $count_image = 0;
-        $view = 0;
-        $count_image = $product_images->count();
-        if ($request->has('view')) {
-            $view = $request->view;
-        } else {
-            $view = 10;
-        }
-        $product_images = $product_images->paginate($view);
-
-        // user
-        $user = Auth::guard('admin')->user();
-        // filter
+        // parameter
         $sort_id = $request->sort_id;
         $status = $request->status;
-
-        return view('admin.gallery.recycle', [
+        // search
+        $search = $request->search;
+        // view
+        $view = $request->has('view') ? $request->view : 10;
+        // data
+        $product = $this->product->find($id);
+        $productImages = $product->images()->onlyTrashed();
+        $productImages_count = $productImages->count();
+        $productImages = $productImages->paginate($view);
+        return view('pages.admin.gallery.recycle', [
+            'productImages' => $productImages,
             'product' => $product,
-            'count_image' => $count_image,
-            'product_images' => $product_images,
-            'view' => $view,
-            //
-            'current_user' => $user,
-            // filter
+            // parameter
             'sort_id' => $sort_id,
+            'search' => $search,
             'status' => $status,
+            'search' => $search,
+            'view' => $view,
+            'productImages_count' => $productImages_count,
         ]);
     }
-    public function doRestore($id, $image_id)
+
+    /**
+     * Restore the specified resource from storage.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function restore($id,$image_id)
     {
-        $product_image = ProductImage::find($image_id);
-        $product_image->is_deleted = 0;
-        $product_image->save();
-        if ($product_image->save()) {
-            return back()->with('success', 'Image #' . $product_image->id . ' has been restored.');
-        } else {
-            return back()->with('error', 'Error occurred!');
-        }
+        $result = $this->productImage->onlyTrashed()->find($image_id)->restore();
+        return $result ? back()->withSuccess('Hình ảnh #' . $image_id . ' đã được phục hồi.') : back()->withError('Lỗi xảy ra trong quá trình khôi phục Hình ảnh #' . $image_id);
     }
 
-    public function doDelete($id, $image_id)
+    /**
+     * Remove the specified resource from storage.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function destroy($id,$image_id, RemoveImage $removeImage)
     {
-        $product_image = ProductImage::find($image_id);
-        if ($product_image->forceDelete()) {
-            return back()->with('success', 'Product_image #' . $product_image->id . ' has been deleted.');
-        } else {
-            return back()->with('error', 'Error occurred!');
-        }
+        //
+        $productImage = $this->productImage->onlyTrashed()->find($image_id);
+        $this->productImage->removeImage($productImage->image, $removeImage);
+        $result = $productImage->forceDelete();
+        return $result ? back()->with('success', 'Hình ảnh #' . $image_id . ' đã được xóa vĩnh viễn.') : back()->withError('Lỗi xảy trong quá trình xóa vĩnh viễn Hình ảnh #' . $image_id);
     }
 
-    public function bulk_action(Request $request)
+    public function bulk_action($id,Request $request, RemoveImage $removeImage)
     {
-        if ($request->has('bulk_action') && $request->bulk_action != null) {
-            if ($request->has('product_image_id_list')) {
+        if ($request->has('bulk_action')) {
+            if ($request->has('productImage_id_list')) {
                 $message = null;
-                $error = null;
+                $errors = null;
                 switch ($request->bulk_action) {
                     case 0: // deactivate
-                        $message = 'Image ';
-                        foreach ($request->product_image_id_list as $image_id) {
-                            $image = null;
-                            $image = ProductImage::find($image_id);
-                            $image->is_actived = 0;
-                            if ($image->save()) {
-                                $message .= ' #' . $image->id . ', ';
+                        $message = 'Hình ảnh ';
+                        foreach ($request->productImage_id_list as $productImage_id) {
+                            $productImage = $this->productImage->find($productImage_id);
+                            $verify = $productImage->update([
+                                'verified' => 0,
+                            ]);
+                            if ($verify) {
+                                $message .= ' #' . $productImage->id . ', ';
                             } else {
-                                return back()->with('error', 'Error occurred while deactivating image #' . $image->id);
+                                $errors[] = 'Lỗi xảy ra khi tắt Hình ảnh #' . $productImage->id . '.';
                             }
                         }
-                        $message .= 'have been deactivated.';
-                        return back()->with('success', $message);
+                        $message .= 'đã được tắt.';
                         break;
                     case 1: // activate
-                        $message = 'Image ';
-                        foreach ($request->product_image_id_list as $image_id) {
-                            $image = null;
-                            $image = ProductImage::find($image_id);
-                            $image->is_actived = 1;
-                            if ($image->save()) {
-                                $message .= ' #' . $image->id . ', ';
+                        $message = 'Hình ảnh ';
+                        foreach ($request->productImage_id_list as $productImage_id) {
+                            $productImage = $this->productImage->find($productImage_id);
+                            $verify = $productImage->update([
+                                'verified' => 1,
+                            ]);
+                            if ($verify) {
+                                $message .= ' #' . $productImage->id . ', ';
                             } else {
-                                return back()->with('error', 'Error occurred while activating image #' . $image->id);
+                                $errors[] = 'Lỗi xảy ra khi bật Hình ảnh #' . $productImage->id . '.';
                             }
                         }
-                        $message .= 'have been activated.';
-                        return back()->with('success', $message);
+                        $message .= 'đã được bật.';
                         break;
                     case 2: // remove
-                        $message = 'Image ';
-                        foreach ($request->product_image_id_list as $image_id) {
-                            $image = null;
-                            $image = ProductImage::find($image_id);
-                            $image->is_deleted = 1;
-                            if ($image->save()) {
-                                $message .= ' #' . $image->id . ', ';
+                        $message = 'Hình ảnh';
+                        foreach ($request->productImage_id_list as $productImage_id) {
+                            $productImage = null;
+                            $productImage = $this->productImage->find($productImage_id);
+                            $result = $productImage->delete();
+                            if ($result) {
+                                $message .= ' #' . $productImage->id . ', ';
                             } else {
-                                return back()->with('error', 'Error occurred while deleting image #' . $image->id);
+                                $errors[] = 'Lỗi xảy ra khi loại bỏ Hình ảnh #' . $productImage->id . '.';
                             }
                         }
-                        $message .= 'have been removed.';
-                        return back()->with('success', $message);
+                        $message .= 'đã được loại bỏ.';
                         break;
                     case 3: // restore
-                        $message = 'Image ';
-                        foreach ($request->product_image_id_list as $image_id) {
-                            $image = null;
-                            $image = ProductImage::find($image_id);
-                            $image->is_deleted = 0;
-                            if ($image->save()) {
-                                $message .= ' #' . $image->id . ', ';
+                        $message = 'Hình ảnh';
+                        foreach ($request->productImage_id_list as $productImage_id) {
+                            $productImage = null;
+                            $productImage = $this->productImage->onlyTrashed()->find($productImage_id);
+                            $result = $productImage->restore();
+                            if ($result) {
+                                $message .= ' #' . $productImage->id . ', ';
                             } else {
-                                return back()->with('error', 'Error occurred while restoring image #' . $image->id);
+                                $errors[] = 'Lỗi xảy ra khi khôi phục Hình ảnh #' . $productImage->id . '.';
                             }
                         }
-                        $message .= 'have been restored.';
-                        return back()->with('success', $message);
+                        $message .= 'đã được khôi phục.';
                         break;
                     case 4: // delete
-                        $message = 'Image ';
-                        foreach ($request->product_image_id_list as $image_id) {
-                            $image = null;
-                            $image = ProductImage::find($image_id);
-                            if ($image->forceDelete()) {
-                                $message .= ' #' . $image->id . ', ';
+                        $message = 'Hình ảnh';
+                        foreach ($request->productImage_id_list as $productImage_id) {
+                            $productImage = null;
+                            $productImage = $this->productImage->onlyTrashed()->find($productImage_id);
+                            $this->productImage->removeImage($productImage->image, $removeImage);
+                            $result = $productImage->forceDelete();
+                            if ($result) {
+                                $message .= ' #' . $productImage->id . ', ';
                             } else {
-                                return back()->with('error', 'Error occurred while deleting image #' . $image->id);
+                                $errors[] = 'Lỗi xảy ra khi xóa vĩnh viễn Hình ảnh #' . $productImage->id . '.';
                             }
                         }
-                        $message .= 'have been deleted.';
-                        return back()->with('success', $message);
+                        $message .= 'đã được xóa vĩnh viễn.';
                         break;
                 }
-                if ($error != null) {
-                    return back()->with('success', $message)->with('error', $error);
+                if ($errors != null) {
+                    return back()->withSuccess($message)->withErrors($errors);
+                } else {
+                    return back()->withSuccess($message);
                 }
-                return back()->with('success', $message);
             } else {
-                return back()->with('error', 'Please select products to take action!');
+                return back()->withError('Hãy chọn ít nhất 1 Hình ảnh để thực hiện thao tác!');
             }
         } else {
-            return back()->with('error', 'Please select an action!');
+            return back()->withError('Hãy chọn 1 thao tác cụ thể!');
         }
     }
 }

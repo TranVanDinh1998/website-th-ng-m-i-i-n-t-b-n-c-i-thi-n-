@@ -3,387 +3,307 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Helpers\RemoveImage;
+use App\Http\Helpers\UploadImage;
+use App\Http\Requests\GeneralRequest;
+use App\Http\Requests\TagRequest;
+use App\Models\Tag;
+use App\Models\category;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Validator;
-use App\Tag;
-use Illuminate\Support\Facades\Auth;
-use App\TagProduct;
-use Illuminate\Support\Facades\File;
-use Illuminate\Support\MessageBag;
-use Illuminate\Support\Str;
-use App\Product;
 
 class TagController extends Controller
 {
-    public function __construct()
+    // contructor
+    public function __construct(Tag $tag, Category $category)
     {
+        $this->tag = $tag;
         $this->middleware('auth:admin');
+        $this->category = $category;
     }
+    /**
+     * Display a listing of the resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
     public function index(Request $request)
     {
-        // tags
-        $tags = tag::notDelete()->search($request)->sortId($request)->status($request);
-        $count_tag = 0;
-        $view = 0;
-        $count_tag = $tags->count();
-        if ($request->has('view')) {
-            $view = $request->view;
-        } else {
-            $view = 10;
-        }
-        $tags = $tags->paginate($view);
-        // filter
+        // parameter
         $sort_id = $request->sort_id;
+        $search = $request->search;
         $status = $request->status;
-        // user
-        $user = Auth::guard('admin')->user();
         // search
         $search = $request->search;
-        // product
-        $products = Product::notDelete()->orderBy('name', 'asc')->get();
-        return view('admin.tag.index', [
-            // tags
+        // view
+        $view = $request->has('view') ? $request->view : 10;
+        // data
+        $tags = $this->tag->withoutTrashed();
+        $tags_count = $tags->count();
+        $tags = $tags->paginate($view);
+        return view('pages.admin.tag.index', [
             'tags' => $tags,
-            'count_tag' => $count_tag,
-
-            'view' => $view,
-            // filter
+            // parameter
             'sort_id' => $sort_id,
-            'status' => $status,
-            // search
             'search' => $search,
-            //
-            'current_user' => $user,
-            // product
-            'products' => $products,
+            'status' => $status,
+            'search' => $search,
+            'view' => $view,
+            'tags_count' => $tags_count,
         ]);
     }
 
-    public function doActivate($id)
+    /**
+     * Verify an item.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function verify($id, $verified)
     {
-        $tag = tag::find($id);
-        $tag->is_actived = 1;
-        if ($tag->save()) {
-            return back()->with('success', 'Tag #' . $tag->id . ' has been activated.');
-        } else {
-            return back()->with('error', 'Error occurred!');
-        }
+        //
+        $verify = $this->tag->find($id)->update([
+            'verified' => $verified,
+        ]);
+        if ($verified == 0)
+            return back()->with('success', 'Thẻ #' . $id . ' đã được tắt .');
+        else
+            return back()->with('success', 'Thẻ #' . $id . ' đã được bật.');
     }
 
-    public function doDeactivate($id)
+    /**
+     * Show the form for creating a new resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function create()
     {
-        $tag = tag::find($id);
-        $tag->is_actived = 0;
-        if ($tag->save()) {
-            return back()->with('success', 'Tag #' . $tag->id . ' has been deactivated.');
-        } else {
-            return back()->with('error', 'Error occurred!');
-        }
-    }
-
-    public function add()
-    {
-        // user
-        $user = Auth::guard('admin')->user();
-        $products = Product::where('is_deleted', 0)->get();
-        return view('admin.tag.add', [
-            'products' => $products,
-            //
-            'current_user' => $user,
+        //
+        return view('pages.admin.tag.create', [
         ]);
     }
 
-    public function doAdd(Request $request)
+    /**
+     * Store a newly created resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\Response
+     */
+    public function store(GeneralRequest $request, UploadImage $uploadImage)
     {
-
-        $validate = Validator::make(
-            $request->all(),
-            [
-                'name' => 'required',
-            ],
-            [
-                'required' => ':attribute must be filled',
-            ]
-        );
-        if ($validate->fails()) {
-            return response()->json([
-                'error' => true,
-                'message' => $validate->errors(),
-            ]);
-        } else {
-            $tag = new Tag();
-            $tag->name = $request->name;
-            $result = $tag->save();
-            if ($result) {
-                foreach ($request->product_id_list as $index => $value) {
-                    $tag_product = null;
-                    $tag_product = new TagProduct();
-                    $tag_product->tag_id = $tag->id;
-                    $tag_product->product_id = $value;
-                    $result2 = $tag_product->save();
-                    if (!$result2) {
-                        $errors = new MessageBag(['errorAddDetail' => 'Error occurred!']);
-                        return response()->json([
-                            'error' => true,
-                            'message' => $errors
-                        ]);
-                    }
-                }
-                return response()->json([
-                    'error' => false,
-                    'message' => 'Success'
-                ]);
-            } else {
-                $errors = new MessageBag(['errorAdd' => 'Error occurred!']);
-                return response()->json([
-                    'error' => true,
-                    'message' => $errors
-                ]);
-            }
-        }
+        //
+        $result = $this->tag->create([
+            'name' => $request->name,
+        ]);
+        return $result ? back()->with('success', 'Thẻ mới được khởi tạo thành công.') : back()->with('error', 'Lỗi xảy ra trong quá trình khởi tạo Thẻ mới.');
     }
+
+    /**
+     * Display the specified resource.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function show($id)
+    {
+        //
+    }
+
+    /**
+     * Show the form for editing the specified resource.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
     public function edit($id)
     {
-        // user
-        $user = Auth::guard('admin')->user();
-        $tag = Tag::find($id);
-        return view('admin.tag.edit', [
+        //
+        $tag = $this->tag->find($id);
+        return view('pages.admin.tag.edit', [
             'tag' => $tag,
-            //
-            'current_user' => $user,
+
         ]);
     }
-    public function doEdit(Request $request)
+
+    /**
+     * Update the specified resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function update(GeneralRequest $request, $id)
     {
-        $validate = Validator::make(
-            $request->all(),
-            [
-                'name' => 'required',
-                'id' => 'required',
-            ],
-            [
-                'required' => ':attribute must be filled',
-            ]
-        );
-        if ($validate->fails()) {
-            return response()->json([
-                'error' => true,
-                'message' => $validate->errors(),
-            ]);
-        } else {
-            $tag = Tag::find($request->id);
-            $tag->name = $request->name;
-            $result = $tag->save();
-            if ($result) {
-                return response()->json([
-                    'error' => false,
-                    'message' => 'Success'
-                ]);
-            } else {
-                $errors = new MessageBag(['errorEdit' => 'Error occurred!']);
-                return response()->json([
-                    'error' => true,
-                    'message' => $errors
-                ]);
-            }
-        }
-    }
-    public function doRemove($id)
-    {
-        $tag = Tag::find($id);
-        $count_tag_products = TagProduct::where('tag_id', $tag->id)->count();
-        if ($count_tag_products == 0) {
-            $tag->is_deleted = 1;
-            if ($tag->save()) {
-                return back()->with('success', 'Tag #' . $tag->name . ' has been removed.');
-            } else {
-                return back()->with('error', 'Error occurred!');
-            }
-        } else {
-            return back()->with('error', 'This tag relates to  ' . $count_tag_products . ' products');
-        }
+        //
+        $tag = $this->tag->find($id);
+        $result = $tag->update([
+            'name' => $request->name,
+        ]);
+        return $result ? back()->with('success', 'Thẻ #' . $tag->id . ' đã được cập nhật.') : back()->with('error', 'Lỗi xảy ra khi cập nhật Thẻ #' . $id);
     }
 
+    /**
+     * Softdelete the specified resource from storage.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function delete($id)
+    {
+        $tag = $this->tag->find($id);
+        $result = $tag->delete();
+        return $result ? back()->withSuccess('Thẻ #' . $id . ' đã bị loại bỏ.') : back()->withError('Xảy ra lỗi khi loại bỏ Thẻ #' . $id);
+    }
+
+
+    /**
+     * Display a listing of the softdeleted resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
     public function recycle(Request $request)
     {
-        // tags
-        $tags = tag::softDelete()->search($request)->sortId($request)->status($request);
-        $count_tag = 0;
-        $view = 0;
-        $count_tag = $tags->count();
-        if ($request->has('view')) {
-            $view = $request->view;
-        } else {
-            $view = 10;
-        }
-        $tags = $tags->paginate($view);
-        // filter
+        // parameter
         $sort_id = $request->sort_id;
+        $search = $request->search;
         $status = $request->status;
-        // user
-        $user = Auth::guard('admin')->user();
         // search
         $search = $request->search;
-        return view('admin.tag.recycle', [
-            // tags
+        // view
+        $view = $request->has('view') ? $request->view : 10;
+        // data
+        $tags = $this->tag->onlyTrashed();
+        $tags_count = $tags->count();
+        $tags = $tags->paginate($view);
+        return view('pages.admin.tag.recycle', [
             'tags' => $tags,
-            'count_tag' => $count_tag,
-
-            'view' => $view,
-            // filter
+            // parameter
             'sort_id' => $sort_id,
-            'status' => $status,
-            //
-            // search
             'search' => $search,
-            'current_user' => $user,
+            'status' => $status,
+            'search' => $search,
+            'view' => $view,
+            'tags_count' => $tags_count,
         ]);
     }
 
-    public function doRestore($id)
+    /**
+     * Restore the specified resource from storage.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function restore($id)
     {
-        $tag = Tag::find($id);
-        $tag->is_deleted = 0;
-        if ($tag->save()) {
-            return back()->with('success', 'Tag #' . $tag->id . ' has been restored.');
-        } else {
-            return back()->with('error', 'Error occurred!');
-        }
+        $result = $this->tag->onlyTrashed()->find($id)->restore();
+        return $result ? back()->withSuccess('Thẻ #' . $id . ' đã được phục hồi.') : back()->withError('Lỗi xảy ra trong quá trình khôi phục Thẻ #' . $id);
     }
 
-    public function doDelete($id)
+    /**
+     * Remove the specified resource from storage.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function destroy($id, RemoveImage $removeImage)
     {
-        $tag = Tag::find($id);
-        if ($tag->forceDelete()) {
-            return back()->with('success', 'Tag #' . $tag->id . ' has been deleted.');
-        } else {
-            return back()->with('error', 'Error occurred!');
-        }
+        //
+        $tag = $this->tag->onlyTrashed()->find($id);
+        $result = $tag->forceDelete();
+        return $result ? back()->with('success', 'Thẻ #' . $id . ' đã được xóa vĩnh viễn.') : back()->withError('Lỗi xảy trong quá trình xóa vĩnh viễn Thẻ #' . $id);
     }
 
-    public function bulk_action(Request $request)
+    public function bulk_action(Request $request, RemoveImage $removeImage)
     {
         if ($request->has('bulk_action')) {
             if ($request->has('tag_id_list')) {
                 $message = null;
-                $error = null;
+                $errors = null;
                 switch ($request->bulk_action) {
                     case 0: // deactivate
-                        $message = 'tag ';
+                        $message = 'Thẻ ';
                         foreach ($request->tag_id_list as $tag_id) {
-                            $tag = null;
-                            $tag = tag::find($tag_id);
-                            $tag->is_actived = 0;
-                            if ($tag->save()) {
+                            $tag = $this->tag->find($tag_id);
+                            $verify = $tag->update([
+                                'verified' => 0,
+                            ]);
+                            if ($verify) {
                                 $message .= ' #' . $tag->id . ', ';
                             } else {
-                                return back()->with('error', 'Error occurred while deactivating tag #' . $tag->id);
+                                $errors[] = 'Lỗi xảy ra khi tắt Thẻ #' . $tag->id . '.';
                             }
                         }
-                        $message .= 'have been deactivated.';
-                        return back()->with('success', $message);
+                        $message .= 'đã được tắt.';
                         break;
                     case 1: // activate
-                        $message = 'tag ';
+                        $message = 'Thẻ ';
                         foreach ($request->tag_id_list as $tag_id) {
-                            $tag = null;
-                            $tag = tag::find($tag_id);
-                            $tag->is_actived = 1;
-                            if ($tag->save()) {
+                            $tag = $this->tag->find($tag_id);
+                            $verify = $tag->update([
+                                'verified' => 1,
+                            ]);
+                            if ($verify) {
                                 $message .= ' #' . $tag->id . ', ';
                             } else {
-                                return back()->with('error', 'Error occurred while activating tag #' . $tag->id);
+                                $errors[] = 'Lỗi xảy ra khi bật Thẻ #' . $tag->id . '.';
                             }
                         }
-                        $message .= 'have been activated.';
-                        return back()->with('success', $message);
+                        $message .= 'đã được bật.';
                         break;
                     case 2: // remove
-                        $message = 'tag';
+                        $message = 'Thẻ';
                         foreach ($request->tag_id_list as $tag_id) {
                             $tag = null;
-                            $tag = tag::find($tag_id);
-                            $count_relative_product = TagProduct::where('tag_id', $tag_id)->count();
-                            if ($count_relative_product == 0) {
-                                $tag->is_deleted = 1;
-                                if ($tag->save()) {
-                                    $message .= ' #' . $tag->id . ', ';
-                                } else {
-                                    return back()->with('error', 'Error occurred while removing tag #' . $tag->id);
-                                }
-                            } else {
-                                return back()->with('error', 'tag #' . $tag->id . ' relates to ' . $count_relative_product . ' products.');
+                            $tag = $this->tag->find($tag_id);
+                            $result = $tag->delete();
+                            if ($result) {
+                                $message .= ' #' . $tag->id . ', ';
+                            }
+                            else {
+                                $errors[] = 'Lỗi xảy ra khi loại bỏ Thẻ #' . $tag->id . '.';
                             }
                         }
-                        $message .= 'have been removed.';
+                        $message .= 'đã được loại bỏ.';
                         break;
                     case 3: // restore
-                        $message = 'tag ';
+                        $message = 'Thẻ';
                         foreach ($request->tag_id_list as $tag_id) {
                             $tag = null;
-                            $tag = tag::find($tag_id);
-                            $tag->is_deleted = 0;
-                            if ($tag->save()) {
+                            $tag = $this->tag->onlyTrashed()->find($tag_id);
+                            $result = $tag->restore();
+                            if ($result) {
                                 $message .= ' #' . $tag->id . ', ';
-                            } else {
-                                return back()->with('error', 'Error occurred while restoring tag #' . $tag->id);
+                            }
+                            else {
+                                $errors[] = 'Lỗi xảy ra khi khôi phục Thẻ #' . $tag->id . '.';
                             }
                         }
-                        $message .= 'have been restored.';
-                        return back()->with('success', $message);
+                        $message .= 'đã được khôi phục.';
                         break;
                     case 4: // delete
-                        $message = 'tag ';
+                        $message = 'Thẻ';
                         foreach ($request->tag_id_list as $tag_id) {
                             $tag = null;
-                            $tag = tag::find($tag_id);
-                            if ($tag->forceDelete()) {
+                            $tag = $this->tag->onlyTrashed()->find($tag_id);
+                            $result = $tag->forceDelete();
+                            if ($result) {
                                 $message .= ' #' . $tag->id . ', ';
-                            } else {
-                                return back()->with('error', 'Error occurred while deleting tag #' . $tag->id);
+                            }
+                            else {
+                                $errors[] = 'Lỗi xảy ra khi xóa vĩnh viễn Thẻ #' . $tag->id . '.';
                             }
                         }
-                        $message .= 'have been deleted.';
-                        return back()->with('success', $message);
-                        break;
-                    case 5: // add tag to product
-                        if ($request->product_id_list == null) {
-                            return back()->with('error', 'Please select at least one product!');
-                        } else {
-                            foreach ($request->tag_id_list as $tag_id) {
-                                foreach ($request->product_id_list as $product_id) {
-                                    if (TagProduct::where('tag_id', $tag_id)->where('product_id', $product_id)->count() > 0) {
-                                        $error .= 'tag #' . $tag_id . ' already has product #' . $product_id . '. ';
-                                        continue;
-                                    } else {
-                                        $message .= 'Product';
-                                        $tag_product = null;
-                                        $tag_product = new TagProduct();
-                                        $tag_product->tag_id = $tag_id;
-                                        $tag_product->product_id = $product_id;
-                                        $result = $tag_product->save();
-                                        if ($result) {
-                                            $message .= ' #' . $product_id . ' ';
-                                        } else {
-                                            return back()->with('error', 'Error occurred when add product #' . $product_id . ' to tag #' . $tag_id);
-                                        }
-                                    }
-                                    $message .= 'have been added to tag #' . $tag_id . '. ';
-                                }
-                            }
-                        }
+                        $message .= 'đã được xóa vĩnh viễn.';
                         break;
                 }
-                if ($error != null) {
-                    return back()->with('success', $message)->with('error', $error);
+                if ($errors != null) {
+                    return back()->withSuccess($message)->withErrors($errors);
                 }
-                return back()->with('success', $message);
+                else {
+                    return back()->withSuccess($message);
+                }
             } else {
-                return back()->with('error', 'Please select tags to take action!');
+                return back()->withError('Hãy chọn ít nhất 1 Thẻ để thực hiện thao tác!');
             }
         } else {
-            return back()->with('error', 'Please select an action!');
+            return back()->withError('Hãy chọn 1 thao tác cụ thể!');
         }
     }
 }

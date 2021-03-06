@@ -1,65 +1,55 @@
 <?php
 
-namespace App;
+namespace App\Models;
 
+use App\Http\Helpers\UploadImage;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Advertise extends Model
 {
-    //
-    protected $table = 'advertises';
-    public $timestamps = false;
+    use HasFactory;
+    use SoftDeletes;
+    protected $fillable = [
+        'id',
+        'name',
+        'summary',
+        'description',
+        'image',
+        'product_id',
+        'verified',
+        'created_at',
+        'updated_at',
+        'deleted_at',
+    ];
 
-    // filter
-    public function scopeSortId($query, $request)
-    {
-        if ($request->has('sort_id') && $request->sort_id != null) {
-            switch ($request->sort_id) {
-                case 0:
-                    $query->orderBy('id', 'asc');
-                    break;
-                case 1:
-                    $query->orderBy('id', 'desc');
-                    break;
-            }
-        }
-        return $query;
+    // relationship
+    public function product() {
+        return $this->belongsTo(Product::class);
     }
-
-    public function scopeStatus($query, $request)
-    {
-        if ($request->has('status') && $request->status != null) {
-            switch ($request->status) {
-                case 0:
-                    $query->where('is_actived', 0);
-                    break;
-                case 1:
-                    $query->where('is_actived', 1);
-                    break;
-            }
-        }
-        return $query;
+    // scope
+    public function scopeActive($q) {
+        return $q->whereVerified(1);
     }
-
-    public function scopeActive($query)
-    {
-        $query->where('is_actived', 1);
-        return $query;
+    public function scopeLatest($q) {
+        return $q->orderByDesc('created_at');
     }
-    public function scopeInactive($query)
+    // get 
+    public function uploadImage($image, $uploadImage)
     {
-        $query->where('is_actived', 0);
-        return $query;
+        $destination_path = 'public/images/advertises';
+        $avatar = $uploadImage->getAvatar($image, $destination_path);
+        if ($uploadImage->upload($image, $destination_path, $avatar))
+            return $avatar;
+        else
+            return null;
     }
 
-    public function scopeSoftDelete($query)
+    public function removeImage($image, $removeImage)
     {
-        $query->where('is_deleted', 1);
-        return $query;
+        $destination_path = 'public/images/advertises';
+        return $removeImage->remove($destination_path, $image);
     }
-    public function scopeNotDelete($query)
-    {
-        $query->where('is_deleted', 0);
-        return $query;
-    }
+
 }

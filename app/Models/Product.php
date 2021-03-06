@@ -1,25 +1,74 @@
 <?php
 
-namespace App;
+namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\DB;
 
 class Product extends Model
 {
-    //
-    protected $table = 'products';
-    public $timestamps = false;
+    use HasFactory;
+    use SoftDeletes;
+    protected $fillable = [
+        'id',
+        'name',
+        'description',
+        'image',
+        'price',
+        'quantity',
+        'remaining',
+        'rating',
+        'view',
+        'category_id',
+        'producer_id',
+        'discount',
+        'verified',
+        'created_at',
+        'updated_at',
+        'deleted_at',
+    ];
 
     // relationship
-    public function producer(){
-        return $this->belongsTo('App\Producer');
+    public function category()
+    {
+        return $this->belongsTo(Category::class);
+    }
+    public function producer()
+    {
+        return $this->belongsTo(Producer::class);
+    }
+    public function images()
+    {
+        return $this->hasMany(ProductImage::class);
+    }
+    public function orderDetails()
+    {
+        return $this->hasMany(OrderDetail::class);
+    }
+    public function reviews()
+    {
+        return $this->hasMany(Review::class);
+    }
+    public function collectionProducts()
+    {
+        return $this->hasMany(CollectionProduct::class);
+    }
+    public function tagProducts()
+    {
+        return $this->hasMany(TagProduct::class);
     }
 
-    public function tag_product() {
-        return $this->hasOne('App\TagProduct');
+    // scope
+    public function scopeActive($q)
+    {
+        return $q->whereVerified(1);
     }
-
+    public function scopeLastest($q)
+    {
+        return $q->orderByDesc('created_at');
+    }
     // filter
     public function scopeSortId($query, $request)
     {
@@ -36,24 +85,25 @@ class Product extends Model
         return $query;
     }
 
-    public function scopeSort($query,$request) {
-        if ($request->has('sort')){
-            switch($request->sort) {
+    public function scopeSort($query, $request)
+    {
+        if ($request->has('sort')) {
+            switch ($request->sort) {
                 case 0:
-                    $query->orderBy('id','asc');
-                break;
+                    $query->orderBy('id', 'asc');
+                    break;
                 case 1:
-                    $query->orderBy('name','asc');
-                break;
+                    $query->orderBy('name', 'asc');
+                    break;
                 case 2:
-                    $query->orderBy('price','asc');
-                break;
+                    $query->orderBy('price', 'asc');
+                    break;
                 case 3:
-                    $query->orderBy('rating','desc');
-                break;
+                    $query->orderBy('rating', 'desc');
+                    break;
                 case 4:
-                    $query->select('id','name','price','description','image','is_actived','is_deleted',DB::raw('quantity-remaining as leftover'))->orderByDesc('leftover');
-                break;
+                    $query->select('id', 'name', 'price', 'description', 'image', DB::raw('quantity-remaining as leftover'))->orderByDesc('leftover');
+                    break;
             }
         }
         return $query;
@@ -72,11 +122,11 @@ class Product extends Model
     public function scopeDate($query, $request)
     {
         if ($request->has('date_from') && !$request->has('date_to')) {
-            $query->whereDate('create_date', '>', $request->date_from);
+            $query->whereDate('created_at', '>', $request->date_from);
         } elseif ($request->has('date_to') && !$request->has('date_from')) {
-            $query->whereDate('create_date', '<', $request->date_to);
+            $query->whereDate('created_at', '<', $request->date_to);
         } elseif ($request->has('date_from') && ($request->has('date_to'))) {
-            $query->whereBetween('create_date', [$request->date_from, $request->date_to]);
+            $query->whereBetween('created_at', [$request->date_from, $request->date_to]);
         }
         return $query;
     }
@@ -94,13 +144,6 @@ class Product extends Model
         if ($price_from != null && $price_to != null) {
             $query->whereBetween('price', [$price_from, $price_to]);
         }
-        // if ($request->has('price_from')  != null && !$request->has('price_to')) {
-        //     $query->where('price', '>', $request->price_from);
-        // } elseif ($request->has('price_to') && !$request->has('price_from')) {
-        //     $query->where('price', '<', $request->price_to);
-        // } elseif ($request->has('price_from')  && ($request->has('price_to'))) {
-        //     
-        // }
         return $query;
     }
 
@@ -144,43 +187,65 @@ class Product extends Model
         return $query;
     }
 
-
-
     public function scopeStatus($query, $request)
     {
         if ($request->has('status') && $request->status != null) {
             switch ($request->status) {
                 case 0:
-                    $query->where('is_actived', 0);
+                    $query->where('verified', 0);
                     break;
                 case 1:
-                    $query->where('is_actived', 1);
+                    $query->where('verified', 1);
                     break;
             }
         }
         return $query;
     }
 
-    public function scopeActive($query)
+
+    //helper
+    public function uploadImage($image, $uploadImage)
     {
-        $query->where('is_actived', 1);
-        return $query;
-    }
-    public function scopeInactive($query)
-    {
-        $query->where('is_actived', 0);
-        return $query;
+        $destination_path = 'public/images/products';
+        $avatar = $uploadImage->getAvatar($image, $destination_path);
+        if ($uploadImage->upload($image, $destination_path, $avatar))
+            return $avatar;
+        else
+            return null;
     }
 
-    public function scopeSoftDelete($query)
+    public function removeImage($image, $removeImage)
     {
-        $query->where('is_deleted', 1);
-        return $query;
-    }
-    public function scopeNotDelete($query)
-    {
-        $query->where('is_deleted', 0);
-        return $query;
+        $destination_path = 'public/images/products';
+        if ($removeImage->remove($destination_path, $image))
+            return true;
+        else
+            return false;
     }
 
+    protected static function boot()
+    {
+        parent::boot();
+        self::deleting(function ($product) {
+            $product->images()->delete();
+            $product->orderDetails()->delete();
+            $product->reviews()->delete();
+            $product->collectionProducts()->delete();
+            $product->tagProducts()->delete();
+            if ($product->forceDeleting) {
+                $product->images()->forceDelete();
+                $product->orderDetails()->forceDelete();
+                $product->reviews()->forceDelete();
+                $product->collectionProducts()->forceDelete();
+                $product->tagProducts()->forceDelete();
+            }
+        });
+        self::restoring(function ($product) {
+            $product->images()->onlyTrashed()->restore();
+            $product->orderDetails()->onlyTrashed()->restore();
+            $product->reviews()->onlyTrashed()->restore();
+            $product->collectionProducts()->onlyTrashed()->restore();
+            $product->tagProducts()->onlyTrashed()->restore();
+        });
+    }
 }

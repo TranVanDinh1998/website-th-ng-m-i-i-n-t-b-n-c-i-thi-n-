@@ -3,53 +3,250 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Support\Facades\DB;
-use App\Product;
-use App\Collection;
-use App\CollectionProduct;
-use App\ProductImage;
-use App\Category;
-use App\Order;
-use App\OrderDetail;
-use App\Producer;
-use App\TagProduct;
-use App\Review;
-use App\Tag;
+use App\Http\Helpers\RemoveImage;
+use App\Http\Helpers\UploadImage;
+use App\Http\Requests\GeneralRequest;
+use App\Http\Requests\ProductRequest;
+use App\Models\Category;
+use App\Models\Collection;
+use App\Models\CollectionProduct;
+use App\Models\Producer;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\MessageBag;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\File;
-use Illuminate\Support\Str;
-
-
+use App\Models\Product;
+use App\Models\Tag;
+use App\Models\TagProduct;
 
 class ProductController extends Controller
 {
-    public function __construct()
+    // contructor
+    public function __construct(Product $product, Category $category, Producer $producer, Tag $tag, Collection $collection, TagProduct $tag_product, CollectionProduct $collection_product)
     {
+        $this->product = $product;
+        $this->category = $category;
+        $this->producer = $producer;
+        $this->tag = $tag;
+        $this->collection = $collection;
+        $this->tag_product = $tag_product;
+        $this->collection_product = $collection_product;
         $this->middleware('auth:admin');
     }
+    /**
+     * Display a listing of the resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
     public function index(Request $request)
     {
-        // products
-        $products = Product::notDelete()->sortId($request)->search($request)
+        // parameter
+        $sort_id = $request->sort_id;
+        $search = $request->search;
+        $date_from = $request->date_from;
+        $date_to = $request->date_to;
+        $price_from = $request->price_from;
+        $price_to = $request->price_to;
+        $remaining = $request->remaining;
+        $category_id = $request->category_id;
+        $producer_id = $request->producer_id;
+        $status = $request->status;
+        $search = $request->search;
+        // view
+        $view = $request->has('view') ? $request->view : 10;
+        // data
+        $products = $this->product->sortId($request)->search($request)
             ->date($request)->price($request)->remaining($request)
             ->category($request)->producer($request)->status($request);
-
-        // 
-        $count_product = 0;
-        $view = 0;
-        $count_product = $products->count();
-        if ($request->has('view')) {
-            $view = $request->view;
-        } else {
-            $view = 10;
-        }
+        $products_count = $products->count();
         $products = $products->paginate($view);
+        //
+        $categories = $this->category->all();
+        $producers = $this->producer->all();
+        $tags = $this->tag->all();
+        $collections = $this->collection->all();
 
-        // filter
+        return view('pages.admin.product.index', [
+            'tags' => $tags,
+            'collections' => $collections,
+            'products' => $products,
+            'categories' => $categories,
+            'producers' => $producers,
+            // parameter
+            'sort_id' => $sort_id,
+            'search' => $search,
+            'date_from' => $date_from,
+            'date_to' => $date_to,
+            'price_from' => $price_from,
+            'price_to' => $price_to,
+            'remaining' => $remaining,
+            'category_id' => $category_id,
+            'producer_id' => $producer_id,
+            'status' => $status,
+            'search' => $search,
+            'view' => $view,
+            'products_count' => $products_count,
+        ]);
+    }
+
+    /**
+     * Verify an item.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function verify($id, $verified)
+    {
+        //
+        $verify = $this->product->find($id)->update([
+            'verified' => $verified,
+        ]);
+        if ($verified == 0)
+            return back()->with('success', 'Sản phẩm #' . $id . ' đã được tắt .');
+        else
+            return back()->with('success', 'Sản phẩm #' . $id . ' đã được bật.');
+    }
+
+    /**
+     * Show the form for creating a new resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function create()
+    {
+        //
+        $categories = $this->category->all();
+        $producers = $this->producer->all();
+        return view('pages.admin.product.create', [
+            'categories' => $categories,
+            'producers' => $producers,
+        ]);
+    }
+
+    /**
+     * Store a newly created resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\Response
+     */
+    public function store(ProductRequest $request, UploadImage $uploadImage)
+    {
+        //
+        $avatar = null;
+        if ($request->hasFile('image')) {
+            $avatar = $this->product->uploadImage($request->image, $uploadImage);
+        }
+        $result = $this->product->create([
+            'name' => $request->name,
+            'description' => $request->description,
+            'image' => $avatar,
+            'price' => $request->price,
+            'quantity' => $request->quantity,
+            'remaining' => $request->quantity,
+            'category_id' => $request->category_id,
+            'producer_id' => $request->producer_id,
+            'discount' => $request->discount,
+        ]);
+        return $result ? back()->with('success', 'Sản phẩm mới được khởi tạo thành công.') : back()->withError('Lỗi xảy ra trong quá trình khởi tạo sản phẩm mới.');
+    }
+
+    /**
+     * Display the specified resource.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function show($id)
+    {
+        //
+    }
+
+    public function import(Request $request)
+    {   
+        $successes = array();
+        $errors = array();
+        foreach ($request->import as $import) {
+            $product = null;
+            $product = $this->product->find($import['product_id']);
+            $result = $product->update([
+                'quantity' => $product->quantity + $import['quantity'],
+                'remaining' => $product->remaining + $import['quantity'],
+            ]);
+            if ($result)
+                $successes[] = 'Sản phẩm #' . $import['product_id'] . ' nhập thêm ' . $import['quantity'] . ' đơn vị';
+            else
+                $errors[] = 'Lỗi xảy ra khi nhập thêm ' . $import['quantity'] . ' đơn vị đối với sản phẩm #' . $import['quantity'];
+        }
+        return back()->withSuccesses($successes)->withErrors($errors);
+    }
+
+    /**
+     * Show the form for editing the specified resource.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function edit($id)
+    {
+        //
+        $product = $this->product->find($id);
+        $categories = $this->category->all();
+        $producers = $this->producer->all();
+        return view('pages.admin.product.edit', [
+            'product' => $product,
+            'categories' => $categories,
+            'producers' => $producers,
+        ]);
+    }
+
+    /**
+     * Update the specified resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function update(ProductRequest $request, $id, UploadImage $uploadImage)
+    {
+        //
+        $avatar = null;
+        $product = $this->product->find($id);
+        if ($request->hasFile('image')) {
+            $avatar = $this->product->uploadImage($request->image, $uploadImage);
+        } else {
+            $avatar = $product->image;
+        }
+        $result = $product->update([
+            'name' => $request->name,
+            'description' => $request->description,
+            'image' => $avatar,
+            'price' => $request->price,
+            'quantity' => $request->quantity,
+            'remaining' => $request->remaining,
+            'category_id' => $request->category_id,
+            'producer_id' => $request->producer_id,
+            'discount' => $request->discount,
+        ]);
+        return $result ? back()->withSuccess('Sản phẩm #' . $product->id . ' đã được cập nhật.') : back()->withError('Lỗi xảy ra khi cập nhật sản phẩm #' . $id);
+    }
+
+    /**
+     * Softdelete the specified resource from storage.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function delete($id)
+    {
+        $product = $this->product->find($id)->delete();
+        return back()->with('success', 'Sản phẩm #' . $id . ' đã được loại bỏ.');
+    }
+
+    /**
+     * Display a listing of the softdeleted resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function recycle(Request $request)
+    {
+
+        // parameter
         $sort_id = $request->sort_id;
         $search = $request->search;
         $date_from = $request->date_from;
@@ -62,358 +259,21 @@ class ProductController extends Controller
         $status = $request->status;
         // search
         $search = $request->search;
-
-        $categories = Category::notDelete()->get();
-        $producers = Producer::notDelete()->get();
-        // tag
-        $tags = Tag::notDelete()->orderBy('name', 'asc')->get();
-        $collections = Collection::notDelete()->orderBy('name', 'asc')->get();
-        // user
-        $user = Auth::guard('admin')->user();
-
-        return view('admin.product.index', [
-            //products
-            'products' => $products,
-            'count_product' => $count_product,
-            'view' => $view,
-            // filter
-            'sort_id' => $sort_id,
-            'search' => $search,
-            'date_from' => $date_from,
-            'date_to' => $date_to,
-            'price_from' => $price_from,
-            'price_to' => $price_to,
-            'remaining' => $remaining,
-            'category_id' => $category_id,
-            'producer_id' => $producer_id,
-            'status' => $status,
-            // search
-            'search' => $search,
-            //
-            'producers' => $producers,
-            'categories' => $categories,
-            'tags' => $tags,
-            'collections' => $collections,
-            //
-            'current_user' => $user,
-        ]);
-    }
-
-    public function doActivate($id)
-    {
-        $product = Product::find($id);
-        $product->is_actived = 1;
-        if ($product->save()) {
-            return back()->with('success', 'Product ' . $product->name . ' has been activated.');
-        } else {
-            return back()->with('error', 'Error occurred!');
-        }
-    }
-
-    public function doDeactivate($id)
-    {
-        $product = Product::find($id);
-        $product->is_actived = 0;
-        if ($product->save()) {
-            return back()->with('success', 'Product ' . $product->name . ' has been deactivated.');
-        } else {
-            return back()->with('error', 'Error occurred!');
-        }
-    }
-
-    public function add()
-    {
-        // user
-        $user = Auth::guard('admin')->user();
-        return view('admin.product.add', [
-            //
-            'current_user' => $user,
-        ]);
-    }
-
-    public function doAdd(Request $request)
-    {
-        $validate = Validator::make(
-            $request->all(),
-            [
-                'name' => 'required',
-                'description' => 'required',
-                'image' => 'required|image',
-                'quantity' => 'required|min:0',
-                'price' => 'required|min:0',
-                'category_id' => 'required',
-                'producer_id' => 'required'
-            ],
-            [
-                'required' => ':attribute must be filled',
-                'image' => ':attribute must be an image'
-            ]
-        );
-        if ($validate->fails()) {
-            return response()->json([
-                'error' => true,
-                'message' => $validate->errors(),
-            ]);
-        } else {
-            $product = new Product();
-            $product->name = $request->name;
-            $product->description = $request->description;
-            $product->quantity = $request->quantity;
-            $product->remaining = $request->quantity;
-            $product->price = $request->price;
-            $product->category_id = $request->category_id;
-            $product->producer_id = $request->producer_id;
-            $product->create_date = date('Y-m-d');
-            if ($request->discount != null && $request->discount != 0) {
-                $product->discount = $request->discount;
-            }
-            $result = $product->save();
-            if ($result) {
-                $path = public_path('uploads/products-images/' . $product->id);
-                if (!File::isDirectory($path)) {
-                    File::makeDirectory($path, 0777, true, true);
-                }
-                if ($request->hasFile('image')) {
-                    $file = $request->file('image');
-                    $format = $file->getClientOriginalExtension();
-                    if ($format != 'jpg' && $format != 'png' && $format != 'jpeg') {
-                        $errors = new MessageBag(['errorImage' => 'File is not an image!']);
-                        return response()->json([
-                            'error' => true,
-                            'message' => $errors,
-                        ]);
-                    }
-                    $name = $file->getClientOriginalName();
-                    $avatar = Str::random(4) . "_" . $name;
-                    while (file_exists("/uploads/products-images/" . $product->id . "/" . $avatar)) {
-                        $avatar = Str::random(4) . "_" . $name;
-                    }
-                    $file->move(public_path() . '/uploads/products-images/' . $product->id, $avatar);
-                    $product->image = $avatar;
-                } else {
-                    $product->image = null;
-                }
-                $result = $product->save();
-                return response()->json([
-                    'error' => false,
-                    'message' => 'Success'
-                ]);
-            } else {
-                $errors = new MessageBag(['errorAdd' => 'Error occurred!']);
-                return response()->json([
-                    'error' => true,
-                    'message' => $errors
-                ]);
-            }
-        }
-    }
-    public function edit($id)
-    {
-        $product =  Product::find($id);
-        // user
-        $user = Auth::guard('admin')->user();
-        return view('admin.product.edit', [
-            'product' => $product,
-            //
-            'current_user' => $user,
-        ]);
-    }
-    public function doEdit(Request $request)
-    {
-        $validate = Validator::make(
-            $request->all(),
-            [
-                'id' => 'required',
-                'name' => 'required',
-                'description' => 'required',
-                'quantity' => 'required|min:0',
-                'price' => 'required|min:0',
-                'category_id' => 'required',
-                'producer_id' => 'required'
-            ],
-            [
-                'required' => ':attribute must be filled',
-            ]
-        );
-        if ($validate->fails()) {
-            return response()->json([
-                'error' => true,
-                'message' => $validate->errors(),
-            ]);
-        } else {
-            $product = Product::find($request->id);
-            $product->name = $request->name;
-            $product->description = $request->description;
-            $product->quantity = $request->quantity;
-            $product->remaining = $request->quantity;
-            $product->price = $request->price;
-            $product->category_id = $request->category_id;
-            $product->producer_id = $request->producer_id;
-            // $product->create_date = date('Y-m-d');
-            if ($request->discount != null && $request->discount != 0) {
-                $product->discount = $request->discount;
-            }
-            $path = public_path('uploads/products-images/' . $request->id);
-            if (!File::isDirectory($path)) {
-                File::makeDirectory($path, 0777, true, true);
-            }
-            if ($request->hasFile('image')) {
-                $file = $request->file('image');
-                $format = $file->getClientOriginalExtension();
-                if ($format != 'jpg' && $format != 'png' && $format != 'jpeg') {
-                    $errors = new MessageBag(['errorImage' => 'File is not an image!']);
-                    return response()->json([
-                        'error' => true,
-                        'message' => $errors,
-                    ]);
-                }
-                $name = $file->getClientOriginalName();
-                $avatar = Str::random(4) . "_" . $name;
-                while (file_exists("/uploads/products-images/" . $request->id . "/" . $avatar)) {
-                    $avatar = Str::random(4) . "_" . $name;
-                }
-                $file->move(public_path() . '/uploads/products-images/' . $request->id, $avatar);
-                $product->image = $avatar;
-            }
-            $result = $product->save();
-            if ($result) {
-                return response()->json([
-                    'error' => false,
-                    'message' => 'Success'
-                ]);
-            } else {
-                $errors = new MessageBag(['errorEdit' => 'Error occurred!']);
-                return response()->json([
-                    'error' => true,
-                    'message' => $errors
-                ]);
-            }
-        }
-    }
-
-    public function doRemove($id)
-    {
-        $product = Product::find($id);
-        if ($product->remaining > 0) {
-            return back()->with('error', 'Unable to remove. Product #' . $product->id . ' has ' . $product->remaining . ' item(s) left in stock.');
-        } else {
-            $count_relative_collection = CollectionProduct::where('product_id', $id)->count();
-            if ($count_relative_collection == 0) {
-                $count_relative_order = OrderDetail::where('product_id', $product->id)->count();
-                if ($count_relative_order == 0) {
-                    $count_relative_tag = TagProduct::where('product_id', $product->id)->count();
-                    if ($count_relative_tag == 0) {
-                        $count_relative_review = Review::where('product_id', $product->id)->count();
-                        if ($count_relative_review == 0) {
-                            $product->is_deleted = 1;
-                            $product->save();
-                            if ($product->save()) {
-                                return back()->with('success', 'Unable to remove. Product #' . $product->id . ' has been removed.');
-                            } else {
-                                return back()->with('error', 'Error occurred!');
-                            }
-                        } else {
-                            return back()->with('error', 'Unable to remove. Product #' . $product->id . ' has related ' . $count_relative_review . ' reviews.');
-                        }
-                    } else {
-                        return back()->with('error', 'Unable to remove. Product #' . $product->id . ' has related ' . $count_relative_tag . ' tags.');
-                    }
-                } else {
-                    return back()->with('error', 'Unable to remove. Product #' . $product->id . ' has related ' . $count_relative_order . ' orders.');
-                }
-            } else {
-                return back()->with('error', 'Unable to remove. Product #' . $product->id . ' relates to ' . $count_relative_collection . ' collections.');
-            }
-        }
-    }
-
-    public function doImport(Request $request)
-    {
-        // $number = $request->number;
-        // $parameter = $request->all();
-        // foreach ($request->import as $import) {
-        // print_r($import) . '<br>';
-        // foreach ($import as $quantity=>$value) {
-        //     echo $quan
-        // }
-        // }
-        // return $parameter;
-        foreach ($request->import as $import) {
-            // print_r($import) . '<br>';
-            // echo $import['product_id']. '-' . $import['quantity']. '<br>';
-            $product = null;
-            $product = Product::find($import['product_id']);
-            $product->quantity += $import['quantity'];
-            $product->remaining += $import['quantity'];
-            $result = $product->save();
-            if (!$result) {
-                return response()->json([
-                    'error' => true,
-                    'message' => 'Error'
-                ]);
-            }
-        }
-        return response()->json([
-            'error' => false,
-            'message' => 'Success',
-        ]);
-
-        // for ($i = 0; $i < $number; $i++) {
-        //     $product = null;
-        //     $product = Product::find($parameter['product_id_' . $i]);
-        //     $product->quantity += $parameter['quantity_' . $i];
-        //     $product->remaining += $parameter['quantity_' . $i];
-        //     $result = $product->save();
-        //     if (!$result) {
-        //         return response()->json([
-        //             'error' => true,
-        //             'message' => 'Error'
-        //         ]);
-        //     }
-        // }
-
-    }
-
-    public function recycle(Request $request)
-    {
-        // products
-        $products = Product::softDelete()->sortId($request)->search($request)
+        // view
+        $view = $request->has('view') ? $request->view : 10;
+        // data
+        $products = $this->product->onlyTrashed()->sortId($request)->search($request)
             ->date($request)->price($request)->remaining($request)
             ->category($request)->producer($request)->status($request);
-
-        // c
-        $count_product = 0;
-        $view = 0;
-        $count_product = $products->count();
-        if ($request->has('view')) {
-            $view = $request->view;
-        } else {
-            $view = 10;
-        }
+        $products_count = $products->count();
         $products = $products->paginate($view);
-
-        // filter
-        $sort_id = $request->sort_id;
-        $search = $request->search;
-        $date_from = $request->date_from;
-        $date_to = $request->date_to;
-        $price_from = $request->price_from;
-        $price_to = $request->price_to;
-        $remaining = $request->remaining;
-        $category_id = $request->category_id;
-        $producer_id = $request->producer_id;
-        $status = $request->status;
-
-        $categories = Category::where('is_deleted', 0)->get();
-        $producers = Producer::where('is_deleted', 0)->get();
-        // user
-        $user = Auth::guard('admin')->user();
-        return view('admin.product.recycle', [
-            //products
+        $categories = $this->category->all();
+        $producers = $this->producer->all();
+        return view('pages.admin.product.recycle', [
             'products' => $products,
-            'count_product' => $count_product,
-            'view' => $view,
-            // filter
+            'categories' => $categories,
+            'producers' => $producers,
+            // parameter
             'sort_id' => $sort_id,
             'search' => $search,
             'date_from' => $date_from,
@@ -424,212 +284,188 @@ class ProductController extends Controller
             'category_id' => $category_id,
             'producer_id' => $producer_id,
             'status' => $status,
-
-            'producers' => $producers,
-            'categories' => $categories,
-            // user
-            'current_user' => $user,
-
+            'search' => $search,
+            'view' => $view,
+            'products_count' => $products_count,
         ]);
     }
-    public function doRestore($id)
+
+    /**
+     * Restore the specified resource from storage.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function restore($id)
     {
-        $product = Product::find($id);
-        $product->is_deleted = 0;
-        $product->save();
-        if ($product->save()) {
-            return back()->with('success', 'Product ' . $product->name . ' has been restored.');
-        } else {
-            return back()->with('error', 'Error occurred!');
-        }
+        $product = $this->product->onlyTrashed()->find($id)->restore();
+        return back()->with('success', 'Sản phẩm #' . $id . ' đã được khôi phục.');
     }
 
-    public function doDelete($id)
+    /**
+     * Remove the specified resource from storage.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function destroy($id, RemoveImage $removeImage)
     {
-        $product = Product::find($id);
-        if ($product->forceDelete()) {
-            return back()->with('success', 'Product ' . $product->name . ' has been deleted.');
-        } else {
-            return back()->with('error', 'Error occurred!');
-        }
+        //
+        $product = $this->product->onlyTrashed()->find($id);
+        $this->product->removeImage($product->image, $removeImage);
+        $product->forceDelete();
+        return back()->with('success', 'Sản phẩm #' . $id . ' đã được xóa vĩnh viễn.');
     }
 
-    public function bulk_action(Request $request)
+    public function bulk_action(Request $request, RemoveImage $removeImage)
     {
-        if ($request->has('bulk_action') && $request->bulk_action != null) {
+        if ($request->has('bulk_action')) {
             if ($request->has('product_id_list')) {
                 $message = null;
-                $error = null;
+                $errors = null;
                 switch ($request->bulk_action) {
                     case 0: // deactivate
-                        $message = 'Product ';
+                        $message = 'Sản phẩm ';
                         foreach ($request->product_id_list as $product_id) {
-                            $product = null;
-                            $product = Product::find($product_id);
-                            $product->is_actived = 0;
-                            if ($product->save()) {
+                            $product = $this->product->find($product_id);
+                            $verify = $product->update([
+                                'verified' => 0,
+                            ]);
+                            if ($verify) {
                                 $message .= ' #' . $product->id . ', ';
                             } else {
-                                return back()->with('error', 'Error occurred when deactivate product #' . $product->id);
+                                $errors[] = 'Lỗi xảy ra khi tắt Sản phẩm #' . $product->id . '.';
                             }
                         }
-                        $message .= 'have been deactivated.';
-                        return back()->with('success', $message);
+                        $message .= 'đã được tắt.';
                         break;
                     case 1: // activate
-                        $message = 'Product ';
+                        $message = 'Sản phẩm ';
                         foreach ($request->product_id_list as $product_id) {
-                            $product = null;
-                            $product = Product::find($product_id);
-                            $product->is_actived = 1;
-                            if ($product->save()) {
+                            $product = $this->product->find($product_id);
+                            $verify = $product->update([
+                                'verified' => 1,
+                            ]);
+                            if ($verify) {
                                 $message .= ' #' . $product->id . ', ';
                             } else {
-                                return back()->with('error', 'Error occurred when activate product #' . $product->id);
+                                $errors[] = 'Lỗi xảy ra khi bật Sản phẩm #' . $product->id . '.';
                             }
                         }
-                        $message .= 'have been activated.';
-                        return back()->with('success', $message);
+                        $message .= 'đã được bật.';
                         break;
                     case 2: // remove
-                        $message = 'Product';
+                        $message = 'Sản phẩm';
                         foreach ($request->product_id_list as $product_id) {
                             $product = null;
-                            $product = Product::find($product_id);
-                            if ($product->remaining > 0) {
-                                return back()->with('error', 'Product #' . $product->id . ' has ' . $product->remaining . ' items left in stock.');
+                            $product = $this->product->find($product_id);
+                            $result = $product->delete();
+                            if ($result) {
+                                $message .= ' #' . $product->id . ', ';
                             } else {
-                                $count_relative_collection = CollectionProduct::where('product_id', $product_id)->count();
-                                if ($count_relative_collection == 0) {
-                                    $count_relative_order = OrderDetail::where('product_id', $product->id)->count();
-                                    if ($count_relative_order == 0) {
-                                        $count_relative_tag = TagProduct::where('product_id', $product->id)->count();
-                                        if ($count_relative_tag == 0) {
-                                            $count_relative_review = Review::where('product_id', $product->id)->count();
-                                            if ($count_relative_review == 0) {
-                                                $product->is_deleted = 1;
-                                                $product->save();
-                                                if ($product->save()) {
-                                                    $message .= ' #' . $product->id . ', ';
-                                                } else {
-                                                    return back()->with('error', 'Error occurred when remove product #' . $product->id);
-                                                }
-                                            } else {
-                                                return back()->with('error', 'Product #' . $product->id . ' has related ' . $count_relative_review . ' reviews.');
-                                            }
-                                        } else {
-                                            return back()->with('error', 'Product #' . $product->id . ' has related ' . $count_relative_tag . ' tags.');
-                                        }
-                                    } else {
-                                        return back()->with('error', 'Product #' . $product->id . ' has related ' . $count_relative_order . ' orders.');
-                                    }
-                                } else {
-                                    return back()->with('error', 'Product #' . $product->id . ' relates to ' . $count_relative_collection . ' collections.');
-                                }
+                                $errors[] = 'Lỗi xảy ra khi loại bỏ Sản phẩm #' . $product->id . '.';
                             }
                         }
-                        $message .= 'have been removed.';
+                        $message .= 'đã được loại bỏ.';
                         break;
-                    case 3: // import
-                        $products = Product::notDelete()->whereIn('id', $request->product_id_list)->get();
-                        return view('admin.product.import', [
+                    case 3: // restore
+                        $message = 'Sản phẩm';
+                        foreach ($request->product_id_list as $product_id) {
+                            $product = null;
+                            $product = $this->product->onlyTrashed()->find($product_id);
+                            $result = $product->restore();
+                            if ($result) {
+                                $message .= ' #' . $product->id . ', ';
+                            } else {
+                                $errors[] = 'Lỗi xảy ra khi khôi phục Sản phẩm #' . $product->id . '.';
+                            }
+                        }
+                        $message .= 'đã được khôi phục.';
+                        break;
+                    case 4: // delete
+                        $message = 'Sản phẩm';
+                        foreach ($request->product_id_list as $product_id) {
+                            $product = null;
+                            $product = $this->product->onlyTrashed()->find($product_id);
+                            $this->product->removeImage($product->image, $removeImage);
+                            $result = $product->forceDelete();
+                            if ($result) {
+                                $message .= ' #' . $product->id . ', ';
+                            } else {
+                                $errors[] = 'Lỗi xảy ra khi xóa vĩnh viễn Sản phẩm #' . $product->id . '.';
+                            }
+                        }
+                        $message .= 'đã được xóa vĩnh viễn.';
+                        break;
+                    case 5: // import
+                        $products = $this->product->whereIn('id', $request->product_id_list)->get();
+                        return view('pages.admin.product.import', [
                             'products' => $products,
                             'count' => count($products),
                         ]);
                         break;
-                    case 4: // restore
-                        $message = 'Product ';
-                        foreach ($request->product_id_list as $product_id) {
-                            $product = null;
-                            $product = Product::find($product_id);
-                            $product->is_deleted = 0;
-                            if ($product->save()) {
-                                $message .= ' #' . $product->id . ', ';
-                            } else {
-                                return back()->with('error', 'Error occurred when restore product #' . $product->id);
-                            }
-                        }
-                        $message .= 'have been restored.';
-                        return back()->with('success', $message);
-                        break;
-                    case 5: // delete
-                        $message = 'Product ';
-                        foreach ($request->product_id_list as $product_id) {
-                            $product = null;
-                            $product = Product::find($product_id);
-                            if ($product->forceDelete()) {
-                                $message .= ' #' . $product->id . ', ';
-                            } else {
-                                return back()->with('error', 'Error occurred when deleted product #' . $product->id);
-                            }
-                        }
-                        $message .= 'have been deleted.';
-                        return back()->with('success', $message);
                         break;
                     case 6: // add tag to product
                         if ($request->tag_id_list == null) {
-                            return back()->with('error', 'Please select aleast one tag!');
+                            return back()->with('error', 'Hãy lựa chọn ít nhất 1 thẻ để gắn!');
                         } else {
                             foreach ($request->product_id_list as $product_id) {
                                 foreach ($request->tag_id_list as $tag_id) {
-                                    if (TagProduct::where('tag_id', $tag_id)->where('product_id', $product_id)->count() > 0) {
-                                        $error .= 'Product #' . $product_id . ' already has tag #' . $tag_id . '. ';
+                                    if ($this->tag_product->where('tag_id', $tag_id)->where('product_id', $product_id)->count() > 0) {
                                         continue;
                                     } else {
-                                        $message .= 'Tag';
-                                        $tag_product = null;
-                                        $tag_product = new TagProduct();
-                                        $tag_product->tag_id = $tag_id;
-                                        $tag_product->product_id = $product_id;
-                                        $result = $tag_product->save();
+                                        $message .= 'Thẻ';
+                                        $result = $this->tag_product->create([
+                                            'tag_id' => $tag_id,
+                                            'product_id' => $product_id,
+                                        ]);
                                         if ($result) {
                                             $message .= ' #' . $tag_id . ' ';
                                         } else {
-                                            return back()->with('error', 'Error occurred when add tag #' . $tag_id . ' to product #' . $product_id);
+                                            $errors[] = 'Lỗi xảy ra khi gắn thẻ #' . $tag_id . ' vào sản phẩm #' . $product_id . '.';
                                         }
                                     }
-                                    $message .= 'have been added to product #' . $product_id . '. ';
+                                    $message .= 'đã được gắn vào sản phẩm #' . $product_id . '. ';
                                 }
                             }
                         }
                         break;
                     case 7: // add product to collection
                         if ($request->collection_id_list == null) {
-                            return back()->with('error', 'Please select aleast one collection!');
+                            return back()->with('error', 'Hãy lựa chọn ít nhất 1 bộ sưu tập để thêm sản phẩm!');
                         } else {
-                            foreach ($request->collection_id_list as $collection_id) {
-                                foreach ($request->product_id_list as $product_id) {
-                                    if (CollectionProduct::where('collection_id', $collection_id)->where('product_id', $product_id)->count() > 0) {
-                                        $error .= 'Collection #' . $collection_id . ' already has product #' . $product_id . '. ';
+                            foreach ($request->product_id_list as $product_id) {
+                                foreach ($request->collection_id_list as $collection_id) {
+                                    if ($this->collection_product->where('collection_id', $collection_id)->where('product_id', $product_id)->count() > 0) {
                                         continue;
                                     } else {
-                                        $message .= 'Product #';
-                                        $collection_product = null;
-                                        $collection_product = new CollectionProduct();
-                                        $collection_product->collection_id = $collection_id;
-                                        $collection_product->product_id = $product_id;
-                                        $result = $collection_product->save();
+                                        $message .= 'Bộ sưu tập';
+                                        $result = $this->collection_product->create([
+                                            'collection_id' => $collection_id,
+                                            'product_id' => $product_id,
+                                        ]);
                                         if ($result) {
-                                            $message .= ' #' . $product_id . ' ';
+                                            $message .= ' #' . $collection_id . ' ';
                                         } else {
-                                            return back()->with('error', 'Error occurred when add product #' . $product_id . ' to collection #' . $collection_id);
+                                            $errors[] = 'Lỗi xảy ra khi thêm sản phẩm #' . $product_id . ' vào bộ sưu tập ' . $collection_id . '.';
                                         }
                                     }
-                                    $message .= 'have been added to collection #' . $collection_id . '. ';
+                                    $message .= 'đã thêm vào sản phẩm #' . $product_id . '. ';
                                 }
                             }
                         }
                         break;
                 }
-                if ($error != null) {
-                    return back()->with('success', $message)->with('error', $error);
+                if ($errors != null) {
+                    return back()->withSuccess($message)->withErrors($errors);
+                } else {
+                    return back()->withSuccess($message);
                 }
-                return back()->with('success', $message);
             } else {
-                return back()->with('error', 'Please select products to take action!');
+                return back()->withError('Hãy chọn ít nhất 1 Sản phẩm để thực hiện thao tác!');
             }
         } else {
-            return back()->with('error', 'Please select an action!');
+            return back()->withError('Hãy chọn 1 thao tác cụ thể!');
         }
     }
 }

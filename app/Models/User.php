@@ -1,25 +1,33 @@
 <?php
 
-namespace App;
+namespace App\Models;
 
 use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
 class User extends Authenticatable
 {
-    use Notifiable;
+    use HasFactory, Notifiable;
 
     /**
      * The attributes that are mass assignable.
      *
      * @var array
      */
+    use SoftDeletes;
     protected $fillable = [
-        'name', 'email', 'is_admin', 'is_deleted','is_actived'
+        'name',
+        'email',
+        'password',
+        'image',
+        'shipping_address_id',
+        'created_at',
+        'updated_at',
+        'deleted_at',
     ];
-    public $timestamps = false;
-
 
     /**
      * The attributes that should be hidden for arrays.
@@ -27,7 +35,8 @@ class User extends Authenticatable
      * @var array
      */
     protected $hidden = [
-        'password', 'remember_token',
+        'password',
+        'remember_token',
     ];
 
     /**
@@ -35,90 +44,45 @@ class User extends Authenticatable
      *
      * @var array
      */
-    // protected $casts = [
-    //     'email_verified_at' => 'datetime',
-    // ];
+    protected $casts = [
+        'email_verified_at' => 'datetime',
+    ];
 
-    public function setAttribute($key, $value)
+    // relationship
+    public function orders() {
+        return $this->hasMany(Order::class)->orderByDesc('created_at');
+    }
+    public function addresses() {
+        return $this->hasMany(Address::class);
+    }
+    public function address() {
+        return $this->belongsTo(Address::class,'shipping_address_id');
+    }
+    // scope
+    public function scopeActive($q)
     {
-        $check = $key == $this->getRememberTokenName();
-        if (!$check) {
-            parent::setAttribute($key, $value);
-        }
+        return $q->whereVerified(1);
+    }
+    public function scopeGuest($q)
+    {
+        return $q->whereGuest(1);
+    }
+    public function uploadImage($image, $uploadImage)
+    {
+        $destination_path = 'public/images/users';
+        $avatar = $uploadImage->getAvatar($image, $destination_path);
+        if ($uploadImage->upload($image, $destination_path, $avatar))
+            return $avatar;
+        else
+            return null;
     }
 
-    // filter
-    public function scopeSortId($query, $request)
+    public function removeImage($image, $removeImage)
     {
-        if ($request->has('sort_id') && $request->sort_id != null) {
-            switch ($request->sort_id) {
-                case 0:
-                    $query->orderBy('id', 'asc');
-                    break;
-                case 1:
-                    $query->orderBy('id', 'desc');
-                    break;
-            }
-        }
-        return $query;
-    }
-
-    public function scopeStatus($query, $request)
-    {
-        if ($request->has('status') && $request->status != null) {
-            switch ($request->status) {
-                case 0:
-                    $query->where('is_actived', 0);
-                    break;
-                case 1:
-                    $query->where('is_actived', 1);
-                    break;
-            }
-        }
-        return $query;
-    }
-
-    public function scopeRole($query, $request)
-    {
-        if ($request->has('role') && $request->status != null) {
-            switch ($request->status) {
-                case 0:
-                    $query->where('is_admin', 0);
-                    break;
-                case 1:
-                    $query->where('is_admin', 1);
-                    break;
-            }
-        }
-        return $query;
-    }
-    
-
-
-    public function scopeActive($query)
-    {
-        $query->where('is_actived', 1);
-        return $query;
-    }
-    public function scopeInactive($query)
-    {
-        $query->where('is_actived', 0);
-        return $query;
-    }
-
-    public function scopeGuest($query) {
-        $query->where('is_guest', 1);
-        return $query;
-    }
-
-    public function scopeSoftDelete($query)
-    {
-        $query->where('is_deleted', 1);
-        return $query;
-    }
-    public function scopeNotDelete($query)
-    {
-        $query->where('is_deleted', 0);
-        return $query;
+        $destination_path = 'public/images/users';
+        if ($removeImage->remove($destination_path, $image))
+            return true;
+        else
+            return false;
     }
 }

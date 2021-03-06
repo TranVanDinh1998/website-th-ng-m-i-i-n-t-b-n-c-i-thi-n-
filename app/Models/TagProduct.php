@@ -1,16 +1,30 @@
 <?php
 
-namespace App;
+namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class TagProduct extends Model
 {
-    //
-    protected $table = 'tag_products';
+    use HasFactory;
+    use SoftDeletes;
     public $timestamps = false;
-    
-    public function product(){
-        return $this->belongsTo('App\Product');
+
+    protected $fillable = [
+        'id',
+        'tag_id',
+        'product_id',
+        'verified',
+        'deleted_at',
+    ];
+    //relationship
+    public function Tag() {
+        return $this->belongsTo(Tag::class);
     }
+    public function product() {
+        return $this->belongsTo(Product::class);
+    }
+    // scope
 }

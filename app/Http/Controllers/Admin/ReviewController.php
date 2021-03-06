@@ -3,180 +3,191 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Support\Facades\DB;
-use App\Collection;
-use App\Review;
-use App\Product;
-use App\User;
+use App\Http\Helpers\RemoveImage;
+use App\Http\Helpers\UploadImage;
+use App\Models\Review;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Facades\File;
-use Illuminate\Support\MessageBag;
-use Illuminate\Support\Facades\Auth;
 
-use Illuminate\Support\Str;
-
-
-
-class ReviewController extends Controller
+class reviewController extends Controller
 {
-    public function __construct()
+    // contructor
+    public function __construct(Review $review)
     {
         $this->middleware('auth:admin');
+        $this->review = $review;
     }
+    /**
+     * Display a listing of the resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
     public function index(Request $request)
     {
-        // reviews
-        $reviews = Review::notDelete()->sortId($request)->status($request);
-        $count_review = 0;
-        $view = 0;
-        $count_review = $reviews->count();
-        if ($request->has('view')) {
-            $view = $request->view;
-        } else {
-            $view = 10;
-        }
-        $reviews = $reviews->paginate($view);
-        $review_product_array = array();
-        $review_user_array = array();
-        foreach ($reviews as $review) {
-            $review_product_array[] = $review->product_id;
-            $review_user_array[] = $review->user_id;
-        }
-        $products = Product::notDelete()->whereIn('id', $review_product_array)->get();
-        $users = User::where('is_deleted', 0)->whereIn('id', $review_user_array)->get();
-
-        // filter
+        // parameter
         $sort_id = $request->sort_id;
         $status = $request->status;
-        // user
-        $user = Auth::guard('admin')->user();
         // search
         $search = $request->search;
-        return view('admin.review.index', [
-            // reviews
+        // view
+        $view = $request->has('view') ? $request->view : 10;
+        // data
+        $reviews = $this->review->sortId($request)->status($request)->latest();
+        $reviews_count = $reviews->count();
+        $reviews = $reviews->paginate($view);
+        return view('pages.admin.review.index', [
             'reviews' => $reviews,
-            'products' => $products,
-            'count_review' =>$count_review,
-            'users' => $users,
-            'view' => $view,
-            // filter
+            // parameter
             'sort_id' => $sort_id,
             'status' => $status,
-            // search
             'search' => $search,
-            // user
-            'current_user' => $user,
+            'view' => $view,
+            'reviews_count' => $reviews_count,
         ]);
     }
 
-    public function doActivate($id)
+    /**
+     * Verify an item.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function verify($id, $verified)
     {
-        $review = Review::find($id);
-        $review->is_actived = 1;
-        if ($review->save()) {
-            return back()->with('success', 'Review #' . $review->id . ' has been approved.');
-        } else {
-            return back()->with('error', 'Error occurred!');
-        }
+        //
+        $verify = $this->review->find($id)->update([
+            'verified' => $verified,
+        ]);
+        if ($verified == 0)
+            return back()->with('success', 'Đánh giá #' . $id . ' đã được bật .');
+        else
+            return back()->with('success', 'Đánh giá #' . $id . ' đã được tắt.');
     }
 
-    public function doDeactivate($id)
+    /**
+     * Show the form for creating a new resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function create()
     {
-        $review = Review::find($id);
-        $review->is_actived = 0;
-        if ($review->save()) {
-            return back()->with('success', 'Review #' . $review->id . ' has been disapproved.');
-        } else {
-            return back()->with('error', 'Error occurred!');
-        }
+        //
     }
-    public function detail($id)
+
+    /**
+     * Store a newly created resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\Response
+     */
+    public function store()
     {
-        // user
-        $user = Auth::guard('admin')->user();
-        $review =  review::find($id);
-        $review_user = User::find($review->user_id);
-        return view('admin.review.detail', [
+        //
+    }
+
+    /**
+     * Display the specified resource.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function show($id)
+    {
+        //
+        $review = $this->review->find($id);
+        return view('pages.admin.review.detail', [
             'review' => $review,
-            //
-            'current_user' => $user,
-            'review_user'=>$review_user,
         ]);
     }
-    public function doRemove($id)
+
+    /**
+     * Show the form for editing the specified resource.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function edit($id)
     {
-        $review = Review::find($id);
-        $review->is_deleted = 1;
-        if ($review->save()) {
-            return back()->with('success', 'Review #' . $review->id . ' has been removed.');
-        } else {
-            return back()->with('error', 'Error occurred!');
-        }
+        //
+
     }
+
+    /**
+     * Update the specified resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function update()
+    {
+    }
+
+    /**
+     * Softdelete the specified resource from storage.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function delete($id)
+    {
+        $review = $this->review->find($id);
+        $result = $review->delete();
+        return $result ? back()->withSuccess('Đánh giá #' . $id . ' đã bị loại bỏ.') : back()->withError('Xảy ra lỗi khi loại bỏ Đánh giá #' . $id);
+    }
+
+
+    /**
+     * Display a listing of the softdeleted resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
     public function recycle(Request $request)
     {
-        // reviews
-        $reviews = review::softDelete()->sortId($request)->status($request);
-        $count_review = 0;
-        $view = 0;
-        $count_review = $reviews->count();
-        if ($request->has('view')) {
-            $view = $request->view;
-        } else {
-            $view = 10;
-        }
-        $reviews = $reviews->paginate($view);
-        $review_product_array = array();
-        $review_user_array = array();
-        foreach ($reviews as $review) {
-            $review_product_array[] = $review->product_id;
-            $review_user_array[] = $review->user_id;
-        }
-        $products = Product::where('is_deleted', 0)->whereIn('id', $review_product_array)->get();
-        $users = User::where('is_deleted', 0)->whereIn('id', $review_user_array)->get();
-        // filter
+        // parameter
         $sort_id = $request->sort_id;
         $status = $request->status;
         // search
         $search = $request->search;
-        // user
-        $user = Auth::guard('admin')->user();
-        return view('admin.review.recycle', [
-            // reviews
+        // view
+        $view = $request->has('view') ? $request->view : 10;
+        // data
+        $reviews = $this->review->onlyTrashed()->sortId($request)->status($request)->latest();
+        $reviews_count = $reviews->count();
+        $reviews = $reviews->paginate($view);
+        return view('pages.admin.review.recycle', [
             'reviews' => $reviews,
-            'products' => $products,
-            'count_review' =>$count_review,
-            'users' => $users,
-            'view' => $view,
-            // filter
+            // parameter
             'sort_id' => $sort_id,
             'status' => $status,
-            // search
             'search' => $search,
-            // user
-            'current_user' => $user,
+            'view' => $view,
+            'reviews_count' => $reviews_count,
         ]);
     }
-    public function doRestore($id)
+
+    /**
+     * Restore the specified resource from storage.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function restore($id)
     {
-        $review = review::find($id);
-        $review->is_deleted = 0;
-        if ($review->save()) {
-            return back()->with('success', 'Review #' . $review->id . ' has been restored.');
-        } else {
-            return back()->with('error', 'Error occurred!');
-        }
+        $result = $this->review->onlyTrashed()->find($id)->restore();
+        return $result ? back()->withSuccess('Đánh giá #' . $id . ' đã được phục hồi.') : back()->withError('Lỗi xảy ra trong quá trình khôi phục Đánh giá #' . $id);
     }
 
-    public function doDelete($id)
+    /**
+     * Remove the specified resource from storage.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function destroy($id)
     {
-        $review = review::find($id);
-        if ($review->forceDelete()) {
-            return back()->with('success', 'Review #' . $review->id . ' has been deleted.');
-        } else {
-            return back()->with('error', 'Error occurred!');
-        }
+        //
+        $review = $this->review->onlyTrashed()->find($id);
+        $result = $review->forceDelete();
+        return $result ? back()->with('success', 'Đánh giá #' . $id . ' đã được xóa vĩnh viễn.') : back()->withError('Lỗi xảy trong quá trình xóa vĩnh viễn Đánh giá #' . $id);
     }
 
     public function bulk_action(Request $request)
@@ -184,87 +195,95 @@ class ReviewController extends Controller
         if ($request->has('bulk_action')) {
             if ($request->has('review_id_list')) {
                 $message = null;
+                $errors = null;
                 switch ($request->bulk_action) {
                     case 0: // deactivate
-                        $message = 'Review ';
+                        $message = 'Đánh giá ';
                         foreach ($request->review_id_list as $review_id) {
-                            $review = null;
-                            $review = review::find($review_id);
-                            $review->is_actived = 0;
-                            if ($review->save()) {
+                            $review = $this->review->find($review_id);
+                            $verify = $review->update([
+                                'verified' => 0,
+                            ]);
+                            if ($verify) {
                                 $message .= ' #' . $review->id . ', ';
                             } else {
-                                return back()->with('error', 'Error occurred while deactivating review #' . $review->id);
+                                $errors[] = 'Lỗi xảy ra khi được đánh dấu là chưa đọc Đánh giá #' . $review->id . '.';
                             }
                         }
-                        $message .= 'have been deactivated.';
-                        return back()->with('success', $message);
+                        $message .= 'đã được tắt.';
                         break;
                     case 1: // activate
-                        $message = 'Review ';
+                        $message = 'Đánh giá ';
                         foreach ($request->review_id_list as $review_id) {
-                            $review = null;
-                            $review = review::find($review_id);
-                            $review->is_actived = 1;
-                            if ($review->save()) {
+                            $review = $this->review->find($review_id);
+                            $verify = $review->update([
+                                'verified' => 1,
+                            ]);
+                            if ($verify) {
                                 $message .= ' #' . $review->id . ', ';
                             } else {
-                                return back()->with('error', 'Error occurred while activating review #' . $review->id);
+                                $errors[] = 'Lỗi xảy ra khi được đánh dấu là đã đọc Đánh giá #' . $review->id . '.';
                             }
                         }
-                        $message .= 'have been activated.';
-                        return back()->with('success', $message);
+                        $message .= 'đã được bật.';
                         break;
                     case 2: // remove
-                        $message = 'review';
+                        $message = 'Đánh giá';
                         foreach ($request->review_id_list as $review_id) {
                             $review = null;
-                            $review = review::find($review_id);
-                            $review->is_deleted = 1;
-                            if ($review->save()) {
+                            $review = $this->review->find($review_id);
+                            $result = $review->delete();
+                            if ($result) {
                                 $message .= ' #' . $review->id . ', ';
-                            } else {
-                                return back()->with('error', 'Error occurred while removing review #' . $review->id);
+                            }
+                            else {
+                                $errors[] = 'Lỗi xảy ra khi loại bỏ Đánh giá #' . $review->id . '.';
                             }
                         }
-                        $message .= 'have been removed.';
+                        $message .= 'đã được loại bỏ.';
                         break;
                     case 3: // restore
-                        $message = 'Review ';
+                        $message = 'Đánh giá';
                         foreach ($request->review_id_list as $review_id) {
                             $review = null;
-                            $review = review::find($review_id);
-                            $review->is_deleted = 0;
-                            if ($review->save()) {
+                            $review = $this->review->onlyTrashed()->find($review_id);
+                            $result = $review->restore();
+                            if ($result) {
                                 $message .= ' #' . $review->id . ', ';
-                            } else {
-                                return back()->with('error', 'Error occurred while restoring review #' . $review->id);
+                            }
+                            else {
+                                $errors[] = 'Lỗi xảy ra khi khôi phục Đánh giá #' . $review->id . '.';
                             }
                         }
-                        $message .= 'have been restored.';
-                        return back()->with('success', $message);
+                        $message .= 'đã được khôi phục.';
                         break;
                     case 4: // delete
-                        $message = 'Review ';
+                        $message = 'Đánh giá';
                         foreach ($request->review_id_list as $review_id) {
                             $review = null;
-                            $review = review::find($review_id);
-                            if ($review->forceDelete()) {
+                            $review = $this->review->onlyTrashed()->find($review_id);
+                            $result = $review->forceDelete();
+                            if ($result) {
                                 $message .= ' #' . $review->id . ', ';
-                            } else {
-                                return back()->with('error', 'Error occurred while deleting review #' . $review->id);
+                            }
+                            else {
+                                $errors[] = 'Lỗi xảy ra khi xóa vĩnh viễn Đánh giá #' . $review->id . '.';
                             }
                         }
-                        $message .= 'have been deleted.';
-                        return back()->with('success', $message);
+                        $message .= 'đã được xóa vĩnh viễn.';
                         break;
                 }
-                return back()->with('success', $message);
+                if ($errors != null) {
+                    return back()->withSuccess($message)->withErrors($errors);
+                }
+                else {
+                    return back()->withSuccess($message);
+                }
             } else {
-                return back()->with('error', 'Please select reviews to take action!');
+                return back()->withError('Hãy chọn ít nhất 1 Đánh giá để thực hiện thao tác!');
             }
         } else {
-            return back()->with('error', 'Please select an action!');
+            return back()->withError('Hãy chọn 1 thao tác cụ thể!');
         }
     }
 }

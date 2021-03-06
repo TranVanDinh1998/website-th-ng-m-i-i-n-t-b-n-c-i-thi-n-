@@ -7,8 +7,7 @@
     class LogoutController extends Controller {
         public function index() {
             Auth::logout();
-            // session()->flush();
-            return redirect('/');
+            return back();
         }
     } 
 ?>

@@ -3,479 +3,320 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Support\Facades\DB;
-use App\Category;
-use App\Collection;
-use App\CollectionProduct;
-use App\Product;
+use App\Http\Helpers\RemoveImage;
+use App\Http\Helpers\UploadImage;
+use App\Http\Requests\GeneralRequest;
+use App\Http\Requests\CategoryRequest;
+use App\Models\Category;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Facades\File;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\MessageBag;
-use Illuminate\Support\Str;
-
-
 
 class CategoryController extends Controller
 {
-    public function __construct()
+    // contructor
+    public function __construct(Category $category)
     {
         $this->middleware('auth:admin');
+        $this->category = $category;
     }
+    /**
+     * Display a listing of the resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
     public function index(Request $request)
     {
-        // categories
-        $categories = Category::notDelete()->search($request)->sortId($request)->status($request);
-        $count_category = 0;
-        $view = 0;
-        $count_category = $categories->count();
-        if ($request->has('view')) {
-            $view = $request->view;
-        } else {
-            $view = 10;
-        }
-        $categories = $categories->paginate($view);
-        // filter
+        // parameter
         $sort_id = $request->sort_id;
+        $search = $request->search;
         $status = $request->status;
         // search
         $search = $request->search;
-        // user
-        $user = Auth::guard('admin')->user();
-        return view('admin.category.index', [
-            // categories
+        // view
+        $view = $request->has('view') ? $request->view : 10;
+        // data
+        $categories = $this->category->search($request)->sortId($request)->status($request);
+        $categories_count = $categories->count();
+        $categories = $categories->paginate($view);
+        return view('pages.admin.category.index', [
             'categories' => $categories,
-            'count_category' => $count_category,
-            'view' => $view,
-            // filter
+            // parameter
             'sort_id' => $sort_id,
-            'status' => $status,
-            //
-            // search
             'search' => $search,
-            'current_user' => $user,
-        ]);
-    }
-    public function doActivate($id)
-    {
-        $category = Category::find($id);
-        $category->is_actived = 1;
-        if ($category->save()) {
-            return back()->with('success', 'Category #' . $category->id . ' has been activated.');
-        } else {
-            return back()->with('error', 'Error occurred!');
-        }
-    }
-
-    public function doDeactivate($id)
-    {
-        $category = Category::find($id);
-        $category->is_actived = 0;
-        if ($category->save()) {
-            return back()->with('success', 'Category #' . $category->id . ' has been deactivated.');
-        } else {
-            return back()->with('error', 'Error occurred!');
-        }
-    }
-
-    public function add()
-    {
-        // user
-        $user = Auth::guard('admin')->user();
-        return view('admin.category.add', [
-            'current_user' => $user,
-
+            'status' => $status,
+            'search' => $search,
+            'view' => $view,
+            'categories_count' => $categories_count,
         ]);
     }
 
-    public function doAdd(Request $request)
+    /**
+     * Verify an item.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function verify($id, $verified)
     {
-        // return $request->all();
-
-        $validate = Validator::make(
-            $request->all(),
-            [
-                'name' => 'required',
-                'description' => 'required',
-                'image' => 'required|image',
-            ],
-            [
-                'required' => ':attribute must be filled',
-                'image' => ':attribute must be an image'
-            ]
-        );
-        if ($validate->fails()) {
-            return response()->json([
-                'error' => true,
-                'message' => $validate->errors(),
-            ]);
-        } else {
-            $category = new Category();
-            $category->name = $request->name;
-            $category->description = $request->description;
-            $result = $category->save();
-            if ($result) {
-                $path = public_path('uploads/categories-images/' . $category->id);
-                if (!File::isDirectory($path)) {
-                    File::makeDirectory($path, 0777, true, true);
-                }
-                if ($request->hasFile('image')) {
-                    $file = $request->file('image');
-                    $format = $file->getClientOriginalExtension();
-                    if ($format != 'jpg' && $format != 'png' && $format != 'jpeg') {
-                        $errors = new MessageBag(['errorImage' => 'File is not an image!']);
-                        return response()->json([
-                            'error' => true,
-                            'message' => $errors,
-                        ]);
-                    }
-                    $name = $file->getClientOriginalName();
-                    $avatar = Str::random(4) . "_" . $name;
-                    while (file_exists("/uploads/categories-images/" . $category->id . "/" . $avatar)) {
-                        $avatar = Str::random(4) . "_" . $name;
-                    }
-                    $file->move(public_path() . '/uploads/categories-images/' . $category->id, $avatar);
-                    $category->image = $avatar;
-                } else {
-                    $category->image = null;
-                }
-                $result = $category->save();
-                return response()->json([
-                    'error' => false,
-                    'message' => 'Success'
-                ]);
-            } else {
-                $errors = new MessageBag(['errorAdd' => 'Error occurred!']);
-                return response()->json([
-                    'error' => true,
-                    'message' => $errors
-                ]);
-            }
-        }
-        // $validate = Validator::make(
-        //     $request->all(),
-        //     [
-        //         'name' => 'required',
-        //         'description' => 'required',
-        //         'image' => 'required|image',
-        //     ],
-        //     [
-        //         'required' => ':attribute must be filled',
-        //         'image' => ':attribute must be an image'
-        //     ]
-        // );
-        // if ($validate->fails()) {
-        //     return response()->json([
-        //         'error' => true,
-        //         'message' => $validate->errors(),
-        //     ]);
-        // } else {
-        //     $category = Category::add($request->all());
-        //     if ($category) {
-        //         $path = public_path('uploads/categories-images/' . $category->id);
-        //         if (!File::isDirectory($path)) {
-        //             File::makeDirectory($path, 0777, true, true);
-        //         }
-        //         if ($request->hasFile('image')) {
-        //             $file = $request->file('image');
-        //             $format = $file->getClientOriginalExtension();
-        //             if ($format != 'jpg' && $format != 'png' && $format != 'jpeg') {
-        //                 $errors = new MessageBag(['errorImage' => 'File is not an image!']);
-        //                 return response()->json([
-        //                     'error' => true,
-        //                     'message' => $errors,
-        //                 ]);
-        //             }
-        //             $name = $file->getClientOriginalName();
-        //             $avatar = Str::random(4) . "_" . $name;
-        //             while (file_exists("/uploads/categories-images/" . $category->id . "/" . $avatar)) {
-        //                 $avatar = Str::random(4) . "_" . $name;
-        //             }
-        //             $file->move(public_path() . '/uploads/categories-images/' . $category->id, $avatar);
-        //             $category->image = $avatar;
-        //         } else {
-        //             $category->image = null;
-        //         }
-        //         $result = $category->save();
-        //         return response()->json([
-        //             'error' => false,
-        //             'message' => 'Success'
-        //         ]);
-        //     } else {
-        //         $errors = new MessageBag(['errorAdd' => 'Error occurred!']);
-        //         return response()->json([
-        //             'error' => true,
-        //             'message' => $errors
-        //         ]);
-        //     }
-        // }
+        //
+        $verify = $this->category->find($id)->update([
+            'verified' => $verified,
+        ]);
+        if ($verified == 0)
+            return back()->with('success', 'Thể loại #' . $id . ' đã được tắt .');
+        else
+            return back()->with('success', 'Thể loại #' . $id . ' đã được bật.');
     }
 
+    /**
+     * Show the form for creating a new resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function create()
+    {
+        //
+        return view('pages.admin.category.create', [
+        ]);
+    }
+
+    /**
+     * Store a newly created resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\Response
+     */
+    public function store(CategoryRequest $request, UploadImage $uploadImage)
+    {
+        //
+        $avatar = null;
+        if ($request->hasFile('image')) {
+            $avatar = $this->category->uploadImage($request->image, $uploadImage);
+        }
+        $result = $this->category->create([
+            'name' => $request->name,
+            'image' => $avatar,
+            'description' => $request->description,
+        ]);
+        return $result ? back()->with('success', 'Thể loại mới được khởi tạo thành công.') : back()->with('error', 'Lỗi xảy ra trong quá trình khởi tạo thể loại mới.');
+    }
+
+    /**
+     * Display the specified resource.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function show($id)
+    {
+        //
+    }
+
+    /**
+     * Show the form for editing the specified resource.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
     public function edit($id)
     {
-        // user
-        $user = Auth::guard('admin')->user();
-        $category =  Category::find($id);
-        return view('admin.category.edit', [
+        //
+        $category = $this->category->find($id);
+        return view('pages.admin.category.edit', [
             'category' => $category,
-            'current_user' => $user,
-
         ]);
     }
-    public function doEdit(Request $request)
+
+    /**
+     * Update the specified resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function update(CategoryRequest $request, $id, UploadImage $uploadImage)
     {
-        $validate = Validator::make(
-            $request->all(),
-            [
-                'id' => 'required',
-                'name' => 'required',
-                'description' => 'required',
-            ],
-            [
-                'required' => ':attribute must be filled',
-            ]
-        );
-        if ($validate->fails()) {
-            return response()->json([
-                'error' => true,
-                'message' => $validate->errors(),
-            ]);
+        //
+        $avatar = null;
+        $category = $this->category->find($id);
+        if ($request->hasFile('image')) {
+            $avatar = $this->category->uploadImage($request->image, $uploadImage);
         } else {
-            $category = Category::find($request->id);
-            $category->name = $request->name;
-            $category->description = $request->description;
-            $path = public_path('uploads/categories-images/' . $request->id);
-            if (!File::isDirectory($path)) {
-                File::makeDirectory($path, 0777, true, true);
-            }
-            if ($request->hasFile('image')) {
-                $file = $request->file('image');
-                $format = $file->getClientOriginalExtension();
-                if ($format != 'jpg' && $format != 'png' && $format != 'jpeg') {
-                    $errors = new MessageBag(['errorImage' => 'File is not an image!']);
-                    return response()->json([
-                        'error' => true,
-                        'message' => $errors,
-                    ]);
-                }
-                $name = $file->getClientOriginalName();
-                $avatar = Str::random(4) . "_" . $name;
-                while (file_exists("/uploads/categories-images/" . $request->id . "/" . $avatar)) {
-                    $avatar = Str::random(4) . "_" . $name;
-                }
-                $file->move(public_path() . '/uploads/categories-images/' . $request->id, $avatar);
-                $category->image = $avatar;
-            }
-            $result = $category->save();
-            if ($result) {
-                return response()->json([
-                    'error' => false,
-                    'message' => 'Success'
-                ]);
-            } else {
-                $errors = new MessageBag(['errorEdit' => 'Error occurred!']);
-                return response()->json([
-                    'error' => true,
-                    'message' => $errors
-                ]);
-            }
+            $avatar = $category->image;
         }
+        $result = $category->update([
+            'name' => $request->name,
+            'image' => $avatar,
+            'description' => $request->description,
+        ]);
+        return $result ? back()->with('success', 'Thể loại #' . $category->id . ' đã được cập nhật.') : back()->with('error', 'Lỗi xảy ra khi cập nhật thể loại #' . $id);
     }
 
-    public function doRemove($id)
+    /**
+     * Softdelete the specified resource from storage.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function delete($id)
     {
-        $category = Category::find($id);
-        $count_products = Product::where('category_id', $category->id)->count();
-        if ($count_products == 0) {
-            $count_collection = Collection::where('category_id', $category->id)->count();
-            if ($count_collection == 0) {
-                $category->is_deleted = 1;
-                if ($category->save()) {
-                    return back()->with('success', 'Category #' . $category->id . ' has been removed.');
-                } else {
-                    return back()->with('error', 'Error occurred!');
-                }
-            } else {
-                return back()->with('error', 'Category #' . $category->id . ' relates to  ' . $count_collection . ' collections. Unable to remove');
-            }
-        } else {
-            return back()->with('error', 'Category #' . $category->id . ' relates to  ' . $count_products . ' products. Unable to remove');
-        }
+        $category = $this->category->find($id);
+        $result = $category->delete();
+        return $result ? back()->withSuccess('Thể loại #' . $id . ' đã bị loại bỏ.') : back()->withError('Xảy ra lỗi khi loại bỏ thể loại #' . $id);
     }
+
+
+    /**
+     * Display a listing of the softdeleted resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
     public function recycle(Request $request)
     {
-        // categories
-        $categories = Category::softDelete()->search($request)->sortId($request)->status($request);
-        $count_category = 0;
-        $view = 0;
-        $count_category = $categories->count();
-        if ($request->has('view')) {
-            $view = $request->view;
-        } else {
-            $view = 10;
-        }
-        $categories = $categories->paginate($view);
-        // filter
+        // parameter
         $sort_id = $request->sort_id;
+        $search = $request->search;
         $status = $request->status;
         // search
         $search = $request->search;
-        // user
-        $user = Auth::guard('admin')->user();
-        return view('admin.category.recycle', [
-            // categories
+        // view
+        $view = $request->has('view') ? $request->view : 10;
+        // data
+        $categories = $this->category->onlyTrashed()->search($request)->sortId($request)->status($request);
+        $categories_count = $categories->count();
+        $categories = $categories->paginate($view);
+        return view('pages.admin.category.recycle', [
             'categories' => $categories,
-            'count_category' => $count_category,
-            'view' => $view,
-            // filter
+            // parameter
             'sort_id' => $sort_id,
-            'status' => $status,
-            // search
             'search' => $search,
-            //
-            'current_user' => $user,
+            'status' => $status,
+            'search' => $search,
+            'view' => $view,
+            'categories_count' => $categories_count,
         ]);
     }
-    public function doRestore($id)
+
+    /**
+     * Restore the specified resource from storage.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function restore($id)
     {
-        $category = Category::find($id);
-        $category->is_deleted = 0;
-        $category->save();
-        if ($category->save()) {
-            return back()->with('success', 'Category #' . $category->id . ' has been restored.');
-        } else {
-            return back()->with('error', 'Error occurred!');
-        }
+        $result = $this->category->onlyTrashed()->find($id)->restore();
+        return $result ? back()->withSuccess('Thể loại #' . $id . ' đã được phục hồi.') : back()->withError('Lỗi xảy ra trong quá trình khôi phục thể loại #' . $id);
     }
 
-    public function doDelete($id)
+    /**
+     * Remove the specified resource from storage.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function destroy($id, RemoveImage $removeImage)
     {
-        $category = Category::find($id);
-        $count_products = Product::where('category_id', $category->id)->count();
-        if ($count_products == 0) {
-            $count_collection = Collection::where('category_id', $category->id)->count();
-            if ($count_collection == 0) {
-                $category->is_deleted = 1;
-                if ($category->forceDelete()) {
-                    return back()->with('success', 'Category #' . $category->id . ' has been deleted.');
-                } else {
-                    return back()->with('error', 'Error occurred!');
-                }
-            } else {
-                return back()->with('error', 'Category #' . $category->id . ' relates to  ' . $count_collection . ' collections. Unable to delete');
-            }
-        } else {
-            return back()->with('error', 'Category #' . $category->id . ' relates to  ' . $count_products . ' products. Unable to delete');
-        }
+        //
+        $category = $this->category->onlyTrashed()->find($id);
+        $this->category->removeImage($category->image, $removeImage);
+        $result = $category->forceDelete();
+        return $result ? back()->with('success', 'Thể loại #' . $id . ' đã được xóa vĩnh viễn.') : back()->withError('Lỗi xảy trong quá trình xóa vĩnh viễn thể loại #' . $id);
     }
 
-    public function bulk_action(Request $request)
+    public function bulk_action(Request $request, RemoveImage $removeImage)
     {
         if ($request->has('bulk_action')) {
             if ($request->has('category_id_list')) {
                 $message = null;
+                $errors = null;
                 switch ($request->bulk_action) {
                     case 0: // deactivate
-                        $message = 'Category ';
+                        $message = 'Thể loại ';
                         foreach ($request->category_id_list as $category_id) {
-                            $category = null;
-                            $category = category::find($category_id);
-                            $category->is_actived = 0;
-                            if ($category->save()) {
+                            $category = $this->category->find($category_id);
+                            $verify = $category->update([
+                                'verified' => 0,
+                            ]);
+                            if ($verify) {
                                 $message .= ' #' . $category->id . ', ';
                             } else {
-                                return back()->with('error', 'Error occurred while deactivating category #' . $category->id);
+                                $errors[] = 'Lỗi xảy ra khi tắt thể loại #' . $category->id . '.';
                             }
                         }
-                        $message .= 'have been deactivated.';
-                        return back()->with('success', $message);
+                        $message .= 'đã được tắt.';
                         break;
                     case 1: // activate
-                        $message = 'Category ';
+                        $message = 'Thể loại ';
                         foreach ($request->category_id_list as $category_id) {
-                            $category = null;
-                            $category = category::find($category_id);
-                            $category->is_actived = 1;
-                            if ($category->save()) {
+                            $category = $this->category->find($category_id);
+                            $verify = $category->update([
+                                'verified' => 1,
+                            ]);
+                            if ($verify) {
                                 $message .= ' #' . $category->id . ', ';
                             } else {
-                                return back()->with('error', 'Error occurred while activating category #' . $category->id);
+                                $errors[] = 'Lỗi xảy ra khi bật thể loại #' . $category->id . '.';
                             }
                         }
-                        $message .= 'have been activated.';
-                        return back()->with('success', $message);
+                        $message .= 'đã được bật.';
                         break;
                     case 2: // remove
-                        $message = 'category';
+                        $message = 'Thể loại';
                         foreach ($request->category_id_list as $category_id) {
                             $category = null;
-                            $category = category::find($category_id);
-                            $count_relative_product = Product::where('category_id', $category_id)->count();
-                            if ($count_relative_product == 0) {
-                                $count_relative_collection = Collection::where('category_id', $category->id)->count();
-                                if ($count_relative_collection == 0) {
-                                    $category->is_deleted = 1;
-                                    $category->save();
-                                    if ($category->save()) {
-                                        $message .= ' #' . $category->id . ', ';
-                                    } else {
-                                        return back()->with('error', 'Error occurred while removing category #' . $category->id);
-                                    }
-                                } else {
-                                    return back()->with('error', 'category #' . $category->id . ' has related ' . $count_relative_collection . ' collections.');
-                                }
-                            } else {
-                                return back()->with('error', 'category #' . $category->id . ' relates to ' . $count_relative_product . ' products.');
+                            $category = $this->category->find($category_id);
+                            $result = $category->delete();
+                            if ($result) {
+                                $message .= ' #' . $category->id . ', ';
+                            }
+                            else {
+                                $errors[] = 'Lỗi xảy ra khi loại bỏ thể loại #' . $category->id . '.';
                             }
                         }
-                        $message .= 'have been removed.';
+                        $message .= 'đã được loại bỏ.';
                         break;
                     case 3: // restore
-                        $message = 'category ';
+                        $message = 'Thể loại';
                         foreach ($request->category_id_list as $category_id) {
                             $category = null;
-                            $category = Category::find($category_id);
-                            $category->is_deleted = 0;
-                            if ($category->save()) {
+                            $category = $this->category->onlyTrashed()->find($category_id);
+                            $result = $category->restore();
+                            if ($result) {
                                 $message .= ' #' . $category->id . ', ';
-                            } else {
-                                return back()->with('error', 'Error occurred while restoring category #' . $category->id);
+                            }
+                            else {
+                                $errors[] = 'Lỗi xảy ra khi khôi phục thể loại #' . $category->id . '.';
                             }
                         }
-                        $message .= 'have been restored.';
-                        return back()->with('success', $message);
+                        $message .= 'đã được khôi phục.';
                         break;
                     case 4: // delete
-                        $message = 'category';
+                        $message = 'Thể loại';
                         foreach ($request->category_id_list as $category_id) {
                             $category = null;
-                            $category = category::find($category_id);
-                            $count_relative_product = Product::where('category_id', $category_id)->count();
-                            if ($count_relative_product == 0) {
-                                $count_relative_collection = Collection::where('category_id', $category->id)->count();
-                                if ($count_relative_collection == 0) {
-                                    if ($category->forceDelete()) {
-                                        $message .= ' #' . $category->id . ', ';
-                                    } else {
-                                        return back()->with('error', 'Error occurred while removing category #' . $category->id);
-                                    }
-                                } else {
-                                    return back()->with('error', 'category #' . $category->id . ' has related ' . $count_relative_collection . ' collections. Unable to delete');
-                                }
-                            } else {
-                                return back()->with('error', 'category #' . $category->id . ' relates to ' . $count_relative_product . ' products. Unable to delete');
+                            $category = $this->category->onlyTrashed()->find($category_id);
+                            $this->category->removeImage($category->image, $removeImage);
+                            $result = $category->forceDelete();
+                            if ($result) {
+                                $message .= ' #' . $category->id . ', ';
+                            }
+                            else {
+                                $errors[] = 'Lỗi xảy ra khi xóa vĩnh viễn thể loại #' . $category->id . '.';
                             }
                         }
-                        $message .= 'have been deleted.';
+                        $message .= 'đã được xóa vĩnh viễn.';
                         break;
                 }
-                return back()->with('success', $message);
+                if ($errors != null) {
+                    return back()->withSuccess($message)->withErrors($errors);
+                }
+                else {
+                    return back()->withSuccess($message);
+                }
             } else {
-                return back()->with('error', 'Please select categories to take action!');
+                return back()->withError('Hãy chọn ít nhất 1 thể loại để thực hiện thao tác!');
             }
         } else {
-            return back()->with('error', 'Please select an action!');
+            return back()->withError('Hãy chọn 1 thao tác cụ thể!');
         }
     }
 }

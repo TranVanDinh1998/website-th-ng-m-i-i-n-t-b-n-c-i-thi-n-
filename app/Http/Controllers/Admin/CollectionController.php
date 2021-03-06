@@ -3,464 +3,331 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Helpers\RemoveImage;
+use App\Http\Helpers\UploadImage;
+use App\Http\Requests\GeneralRequest;
+use App\Http\Requests\CollectionRequest;
+use App\Models\Collection;
+use App\Models\category;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Validator;
-use App\Collection;
-use App\CollectionProduct;
-use Illuminate\Support\Facades\Auth;
-
-use Illuminate\Support\Facades\File;
-use Illuminate\Support\MessageBag;
-use Illuminate\Support\Str;
-use App\Product;
 
 class CollectionController extends Controller
 {
-    public function __construct()
+    // contructor
+    public function __construct(Collection $collection, Category $category)
     {
+        $this->collection = $collection;
         $this->middleware('auth:admin');
+        $this->category = $category;
     }
+    /**
+     * Display a listing of the resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
     public function index(Request $request)
     {
-        // collections
-        $collections = collection::notDelete()->search($request)->sortId($request)->status($request);
-        $count_collection = 0;
-        $view = 0;
-        $count_collection = $collections->count();
-        if ($request->has('view')) {
-            $view = $request->view;
-        } else {
-            $view = 10;
-        }
-        $collections = $collections->paginate($view);
-        // filter
+        // parameter
         $sort_id = $request->sort_id;
+        $search = $request->search;
         $status = $request->status;
         // search
         $search = $request->search;
-        // user
-        $user = Auth::guard('admin')->user();
-        // product
-        $products = Product::notDelete()->orderBy('name', 'asc')->get();
-        return view('admin.collection.index', [
-            // collections
+        // view
+        $view = $request->has('view') ? $request->view : 10;
+        // data
+        $collections = $this->collection->search($request)->sortId($request)->status($request);
+        $collections_count = $collections->count();
+        $collections = $collections->paginate($view);
+        return view('pages.admin.collection.index', [
             'collections' => $collections,
-            'count_collection' => $count_collection,
-            'view' => $view,
-            // filter
+            // parameter
             'sort_id' => $sort_id,
-            'status' => $status,
-            // search
             'search' => $search,
-            // user
-            'current_user' => $user,
-            // product
-            'products' => $products,
+            'status' => $status,
+            'search' => $search,
+            'view' => $view,
+            'collections_count' => $collections_count,
         ]);
     }
 
-    public function doActivate($id)
+    /**
+     * Verify an item.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function verify($id, $verified)
     {
-        $collection = Collection::find($id);
-        $collection->is_actived = 1;
-        if ($collection->save()) {
-            return back()->with('success', 'Collection #' . $collection->id . ' has been activated.');
-        } else {
-            return back()->with('error', 'Error occurred!');
-        }
+        //
+        $verify = $this->collection->find($id)->update([
+            'verified' => $verified,
+        ]);
+        if ($verified == 0)
+            return back()->with('success', 'Bộ sưu tập #' . $id . ' đã được tắt .');
+        else
+            return back()->with('success', 'Bộ sưu tập #' . $id . ' đã được bật.');
     }
 
-    public function doDeactivate($id)
+    /**
+     * Show the form for creating a new resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function create()
     {
-        $collection = Collection::find($id);
-        $collection->is_actived = 0;
-        if ($collection->save()) {
-            return back()->with('success', 'Collection #' . $collection->id . ' has been deactivated.');
-        } else {
-            return back()->with('error', 'Error occurred!');
-        }
-    }
-
-    public function add()
-    {
-        // user
-        $user = Auth::guard('admin')->user();
-        $products = Product::where('is_deleted', 0)->get();
-        return view('admin.collection.add', [
-            'products' => $products,
-            // user
-            'current_user' => $user,
+        //
+        $categories = $this->category->all();
+        return view('pages.admin.collection.create', [
+            'categories' => $categories,
         ]);
     }
 
-    public function doAdd(Request $request)
+    /**
+     * Store a newly created resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\Response
+     */
+    public function store(CollectionRequest $request, UploadImage $uploadImage)
     {
-
-        $validate = Validator::make(
-            $request->all(),
-            [
-                'name' => 'required',
-                'description' => 'required',
-                'category_id' => 'required',
-            ],
-            [
-                'required' => ':attribute must be filled',
-            ]
-        );
-        if ($validate->fails()) {
-            return response()->json([
-                'error' => true,
-                'message' => $validate->errors(),
-            ]);
-        } else {
-            $collection = new Collection();
-            $collection->name = $request->name;
-            $collection->description = $request->description;
-            $collection->category_id = $request->category_id;
-            if ($request->priority) {
-                $collection->priority = $request->priority;
-            } else {
-                $collection->priority = 0;
-            }
-            if ($request->hasFile('image')) {
-                $file = $request->file('image');
-                $format = $file->getClientOriginalExtension();
-                if ($format != 'jpg' && $format != 'png' && $format != 'jpeg') {
-                    $errors = new MessageBag(['errorImage' => 'File is not an image!']);
-                    return response()->json([
-                        'error' => true,
-                        'message' => $errors,
-                    ]);
-                }
-                $name = $file->getClientOriginalName();
-                $avatar = Str::random(4) . "_" . $name;
-                while (file_exists("/uploads/categories-images/" . $request->category_id . "/" . $avatar)) {
-                    $avatar = Str::random(4) . "_" . $name;
-                }
-                $file->move(public_path() . '/uploads/categories-images/' . $request->category_id, $avatar);
-                $collection->image = $avatar;
-            } else {
-                $collection->image = null;
-            }
-            $result = $collection->save();
-            if ($result) {
-                if ($request->has('product_id_list')) {
-                    foreach ($request->product_id_list as $index => $value) {
-                        $collection_product = null;
-                        $collection_product = new CollectionProduct();
-                        $collection_product->collection_id = $collection->id;
-                        $collection_product->product_id = $value;
-                        $result2 = $collection_product->save();
-                        if (!$result2) {
-                            $errors = new MessageBag(['errorAddDetail' => 'Error occurred!']);
-                            return response()->json([
-                                'error' => true,
-                                'message' => $errors
-                            ]);
-                        }
-                    }
-                }
-                return response()->json([
-                    'error' => false,
-                    'message' => 'Success'
-                ]);
-            } else {
-                $errors = new MessageBag(['errorAdd' => 'Error occurred!']);
-                return response()->json([
-                    'error' => true,
-                    'message' => $errors
-                ]);
-            }
+        //
+        $avatar = null;
+        if ($request->hasFile('image')) {
+            $avatar = $this->collection->uploadImage($request->image, $uploadImage);
         }
+        $result = $this->collection->create([
+            'name' => $request->name,
+            'description' => $request->description,
+            'image' => $avatar,
+            'category_id' => $request->category_id,
+            'priority' => $request->priority,
+        ]);
+        return $result ? back()->with('success', 'Bộ sưu tập mới được khởi tạo thành công.') : back()->with('error', 'Lỗi xảy ra trong quá trình khởi tạo Bộ sưu tập mới.');
     }
 
+    /**
+     * Display the specified resource.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function show($id)
+    {
+        //
+    }
+
+    /**
+     * Show the form for editing the specified resource.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
     public function edit($id)
     {
-        $collection =  Collection::find($id);
-        $collection_products = CollectionProduct::where('is_deleted', 0)->where('collection_id', '=', $id)->get();
-        $collection_products_array = array();
-        foreach ($collection_products as $collection_product) {
-            $collection_products_array[] = $collection_product->id;
-        }
-        $products = Product::where('is_deleted', 0)->whereIn('id', $collection_products_array)->get();
-        // print_r($collection_products);
-        // user
-        $user = Auth::guard('admin')->user();
-        return view('admin.collection.edit', [
+        //
+        $categories = $this->category->all();
+        $collection = $this->collection->find($id);
+        return view('pages.admin.collection.edit', [
             'collection' => $collection,
-            'products' => $products,
-            'collection_products' => $collection_products,
-            //
-            'current_user' => $user,
+            'categories' => $categories,
+
         ]);
     }
 
-    public function doEdit(Request $request)
+    /**
+     * Update the specified resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function update(CollectionRequest $request, $id, UploadImage $uploadImage)
     {
-
-        $validate = Validator::make(
-            $request->all(),
-            [
-                'id' => 'required',
-                'name' => 'required',
-                'description' => 'required',
-                'category_id' => 'required',
-            ],
-            [
-                'required' => ':attribute must be filled',
-            ]
-        );
-        if ($validate->fails()) {
-            return response()->json([
-                'error' => true,
-                'message' => $validate->errors(),
-            ]);
+        //
+        $avatar = null;
+        $collection = $this->collection->find($id);
+        if ($request->hasFile('image')) {
+            $avatar = $this->collection->uploadImage($request->image, $uploadImage);
         } else {
-            $collection = Collection::find($request->id);
-            $collection->name = $request->name;
-            $collection->description = $request->description;
-            $collection->category_id = $request->category_id;
-            if ($request->has('priority')) {
-                $collection->priority = $request->priority;
-            }
-            if ($request->hasFile('image')) {
-                $file = $request->file('image');
-                $format = $file->getClientOriginalExtension();
-                if ($format != 'jpg' && $format != 'png' && $format != 'jpeg') {
-                    $errors = new MessageBag(['errorImage' => 'File is not an image!']);
-                    return response()->json([
-                        'error' => true,
-                        'message' => $errors,
-                    ]);
-                }
-                $name = $file->getClientOriginalName();
-                $avatar = Str::random(4) . "_" . $name;
-                while (file_exists("/uploads/categories-images/" . $request->category_id . "/" . $avatar)) {
-                    $avatar = Str::random(4) . "_" . $name;
-                }
-                $file->move(public_path() . '/uploads/categories-images/' . $request->category_id, $avatar);
-                $collection->image = $avatar;
-            }
-            $result = $collection->save();
-            if ($result) {
-                return response()->json([
-                    'error' => false,
-                    'message' => 'Success'
-                ]);
-            } else {
-                $errors = new MessageBag(['errorEdit' => 'Error occurred!']);
-                return response()->json([
-                    'error' => true,
-                    'message' => $errors
-                ]);
-            }
+            $avatar = $collection->image;
         }
+        $result = $collection->update([
+            'name' => $request->name,
+            'description' => $request->description,
+            'image' => $avatar,
+            'category_id' => $request->category_id,
+            'priority' => $request->priority,
+        ]);
+        return $result ? back()->with('success', 'Bộ sưu tập #' . $collection->id . ' đã được cập nhật.') : back()->with('error', 'Lỗi xảy ra khi cập nhật Bộ sưu tập #' . $id);
     }
 
-    public function doRemove($id)
+    /**
+     * Softdelete the specified resource from storage.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function delete($id)
     {
-        $collection = Collection::find($id);
-        $count_collection_products = CollectionProduct::where('collection_id', $collection->id)->count();
-        if ($count_collection_products == 0) {
-            $collection->is_deleted = 1;
-            if ($collection->save()) {
-                return back()->with('success', 'Collection #' . $collection->id . ' has been removed.');
-            } else {
-                return back()->with('error', 'Error occurred!');
-            }
-        } else {
-            return back()->with('error', 'Collection #'.$collection->id.' relates to  ' . $count_collection_products . ' products. Unable to remove');
-        }
+        $collection = $this->collection->find($id);
+        $result = $collection->delete();
+        return $result ? back()->withSuccess('Bộ sưu tập #' . $id . ' đã bị loại bỏ.') : back()->withError('Xảy ra lỗi khi loại bỏ Bộ sưu tập #' . $id);
     }
 
+
+    /**
+     * Display a listing of the softdeleted resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
     public function recycle(Request $request)
     {
-        // collections
-        $collections = collection::softDelete()->search($request)->sortId($request)->status($request);
-        $count_collection = 0;
-        $view = 0;
-        $count_collection = $collections->count();
-        if ($request->has('view')) {
-            $view = $request->view;
-        } else {
-            $view = 10;
-        }
-        $collections = $collections->paginate($view);
-        // filter
+        // parameter
         $sort_id = $request->sort_id;
+        $search = $request->search;
         $status = $request->status;
         // search
         $search = $request->search;
-        // user
-        $user = Auth::guard('admin')->user();
-        return view('admin.collection.recycle', [
-            // collections
+        // view
+        $view = $request->has('view') ? $request->view : 10;
+        // data
+        $collections = $this->collection->onlyTrashed()->search($request)->sortId($request)->status($request);
+        $collections_count = $collections->count();
+        $collections = $collections->paginate($view);
+        return view('pages.admin.collection.recycle', [
             'collections' => $collections,
-            'count_collection' => $count_collection,
-            'view' => $view,
-            // filter
+            // parameter
             'sort_id' => $sort_id,
-            'status' => $status,
-            // search
             'search' => $search,
-            // user
-            'current_user' => $user,
+            'status' => $status,
+            'search' => $search,
+            'view' => $view,
+            'collections_count' => $collections_count,
         ]);
     }
 
-    public function doRestore($id)
+    /**
+     * Restore the specified resource from storage.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function restore($id)
     {
-        $collection = Collection::find($id);
-        $collection->is_deleted = 0;
-        if ($collection->save()) {
-            return back()->with('success', 'Collection #' . $collection->id . ' has been restored.');
-        } else {
-            return back()->with('error', 'Error occurred!');
-        }
+        $result = $this->collection->onlyTrashed()->find($id)->restore();
+        return $result ? back()->withSuccess('Bộ sưu tập #' . $id . ' đã được phục hồi.') : back()->withError('Lỗi xảy ra trong quá trình khôi phục Bộ sưu tập #' . $id);
     }
 
-    public function doDelete($id)
+    /**
+     * Remove the specified resource from storage.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function destroy($id, RemoveImage $removeImage)
     {
-        $collection = Collection::find($id);
-        $count_collection_products = CollectionProduct::where('collection_id', $collection->id)->count();
-        if ($count_collection_products == 0) {
-            $collection->is_deleted = 1;
-            if ($collection->forceDelete()) {
-                return back()->with('success', 'Collection #' . $collection->id . ' has been deleted.');
-            } else {
-                return back()->with('error', 'Error occurred!');
-            }
-        } else {
-            return back()->with('error', 'Collection #'.$collection->id.' relates to  ' . $count_collection_products . ' products. Unable to delete');
-        }
+        //
+        $collection = $this->collection->onlyTrashed()->find($id);
+        $this->collection->removeImage($collection->image, $removeImage);
+        $result = $collection->forceDelete();
+        return $result ? back()->with('success', 'Bộ sưu tập #' . $id . ' đã được xóa vĩnh viễn.') : back()->withError('Lỗi xảy trong quá trình xóa vĩnh viễn Bộ sưu tập #' . $id);
     }
-    public function bulk_action(Request $request)
+
+    public function bulk_action(Request $request, RemoveImage $removeImage)
     {
         if ($request->has('bulk_action')) {
             if ($request->has('collection_id_list')) {
                 $message = null;
-                $error = null;
+                $errors = null;
                 switch ($request->bulk_action) {
                     case 0: // deactivate
-                        $message = 'collection ';
+                        $message = 'Bộ sưu tập ';
                         foreach ($request->collection_id_list as $collection_id) {
-                            $collection = null;
-                            $collection = collection::find($collection_id);
-                            $collection->is_actived = 0;
-                            if ($collection->save()) {
+                            $collection = $this->collection->find($collection_id);
+                            $verify = $collection->update([
+                                'verified' => 0,
+                            ]);
+                            if ($verify) {
                                 $message .= ' #' . $collection->id . ', ';
                             } else {
-                                return back()->with('error', 'Error occurred when deactivate collection #' . $collection->id);
+                                $errors[] = 'Lỗi xảy ra khi tắt Bộ sưu tập #' . $collection->id . '.';
                             }
                         }
-                        $message .= 'have been deactivated.';
-                        return back()->with('success', $message);
+                        $message .= 'đã được tắt.';
                         break;
                     case 1: // activate
-                        $message = 'collection ';
+                        $message = 'Bộ sưu tập ';
                         foreach ($request->collection_id_list as $collection_id) {
-                            $collection = null;
-                            $collection = collection::find($collection_id);
-                            $collection->is_actived = 1;
-                            if ($collection->save()) {
+                            $collection = $this->collection->find($collection_id);
+                            $verify = $collection->update([
+                                'verified' => 1,
+                            ]);
+                            if ($verify) {
                                 $message .= ' #' . $collection->id . ', ';
                             } else {
-                                return back()->with('error', 'Error occurred when activate collection #' . $collection->id);
+                                $errors[] = 'Lỗi xảy ra khi bật Bộ sưu tập #' . $collection->id . '.';
                             }
                         }
-                        $message .= 'have been activated.';
-                        return back()->with('success', $message);
+                        $message .= 'đã được bật.';
                         break;
                     case 2: // remove
-                        $message = 'Collection';
+                        $message = 'Bộ sưu tập';
                         foreach ($request->collection_id_list as $collection_id) {
                             $collection = null;
-                            $collection = collection::find($collection_id);
-                            $count_relative_collection_product = CollectionProduct::where('collection_id', $collection_id)->count();
-                            if ($count_relative_collection_product == 0) {
-                                $collection->is_deleted = 1;
-                                if ($collection->save()) {
-                                    $message .= ' #' . $collection->id . ', ';
-                                } else {
-                                    return back()->with('error', 'Error occurred when remove collection #' . $collection->id);
-                                }
-                            } else {
-                                return back()->with('error', 'Collection #' . $collection->id . ' relates to ' . $count_relative_collection_product . ' products.');
+                            $collection = $this->collection->find($collection_id);
+                            $result = $collection->delete();
+                            if ($result) {
+                                $message .= ' #' . $collection->id . ', ';
+                            }
+                            else {
+                                $errors[] = 'Lỗi xảy ra khi loại bỏ Bộ sưu tập #' . $collection->id . '.';
                             }
                         }
-                        $message .= 'have been removed.';
+                        $message .= 'đã được loại bỏ.';
                         break;
                     case 3: // restore
-                        $message = 'collection ';
+                        $message = 'Bộ sưu tập';
                         foreach ($request->collection_id_list as $collection_id) {
                             $collection = null;
-                            $collection = collection::find($collection_id);
-                            $collection->is_deleted = 0;
-                            if ($collection->save()) {
+                            $collection = $this->collection->onlyTrashed()->find($collection_id);
+                            $result = $collection->restore();
+                            if ($result) {
                                 $message .= ' #' . $collection->id . ', ';
-                            } else {
-                                return back()->with('error', 'Error occurred while restoring collection #' . $collection->id);
+                            }
+                            else {
+                                $errors[] = 'Lỗi xảy ra khi khôi phục Bộ sưu tập #' . $collection->id . '.';
                             }
                         }
-                        $message .= 'have been restored.';
-                        return back()->with('success', $message);
+                        $message .= 'đã được khôi phục.';
                         break;
                     case 4: // delete
-                        $message = 'Collection';
+                        $message = 'Bộ sưu tập';
                         foreach ($request->collection_id_list as $collection_id) {
                             $collection = null;
-                            $collection = collection::find($collection_id);
-                            $count_relative_collection_product = CollectionProduct::where('collection_id', $collection_id)->count();
-                            if ($count_relative_collection_product == 0) {
-                                if ($collection->forceDelete()) {
-                                    $message .= ' #' . $collection->id . ', ';
-                                } else {
-                                    return back()->with('error', 'Error occurred while removing collection #' . $collection->id);
-                                }
-                            } else {
-                                return back()->with('error', 'Collection #' . $collection->id . ' relates to ' . $count_relative_collection_product . ' products. Unable to deleted');
+                            $collection = $this->collection->onlyTrashed()->find($collection_id);
+                            $this->collection->removeImage($collection->image, $removeImage);
+                            $result = $collection->forceDelete();
+                            if ($result) {
+                                $message .= ' #' . $collection->id . ', ';
+                            }
+                            else {
+                                $errors[] = 'Lỗi xảy ra khi xóa vĩnh viễn Bộ sưu tập #' . $collection->id . '.';
                             }
                         }
-                        $message .= 'have been deleted.';
-                        break;
-                    case 5: // add tag to product
-                        if ($request->product_id_list == null) {
-                            return back()->with('error', 'Please select at least one product!');
-                        } else {
-                            foreach ($request->collection_id_list as $collection_id) {
-                                foreach ($request->product_id_list as $product_id) {
-                                    if (CollectionProduct::where('collection_id', $collection_id)->where('product_id', $product_id)->count() > 0) {
-                                        $error .= 'Collection #' . $collection_id . ' already has product #' . $product_id . '. ';
-                                        continue;
-                                    } else {
-                                        $message .= 'Product';
-                                        $collection_product = null;
-                                        $collection_product = new CollectionProduct();
-                                        $collection_product->collection_id = $collection_id;
-                                        $collection_product->product_id = $product_id;
-                                        $result = $collection_product->save();
-                                        if ($result) {
-                                            $message .= ' #' . $product_id . ' ';
-                                        } else {
-                                            return back()->with('error', 'Error occurred while adding product #' . $product_id . ' to collection #' . $collection_id);
-                                        }
-                                    }
-                                    $message .= 'have been added to collection #' . $collection_id . '. ';
-                                }
-                            }
-                        }
+                        $message .= 'đã được xóa vĩnh viễn.';
                         break;
                 }
-                if ($error != null) {
-                    return back()->with('success', $message)->with('error', $error);
+                if ($errors != null) {
+                    return back()->withSuccess($message)->withErrors($errors);
                 }
-                return back()->with('success', $message);
+                else {
+                    return back()->withSuccess($message);
+                }
             } else {
-                return back()->with('error', 'Please select collections to take action!');
+                return back()->withError('Hãy chọn ít nhất 1 Bộ sưu tập để thực hiện thao tác!');
             }
         } else {
-            return back()->with('error', 'Please select an action!');
+            return back()->withError('Hãy chọn 1 thao tác cụ thể!');
         }
     }
 }

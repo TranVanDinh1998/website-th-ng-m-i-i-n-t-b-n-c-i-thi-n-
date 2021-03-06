@@ -3,362 +3,316 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Support\Facades\DB;
-use App\Category;
-use App\tag;
-use App\Product;
-use App\TagProduct;
+use App\Http\Helpers\RemoveImage;
+use App\Http\Helpers\UploadImage;
+use App\Http\Requests\GeneralRequest;
+use App\Http\Requests\ImageRequest;
+use App\Models\tag;
+use App\Models\TagProduct;
+use App\Models\Product;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\MessageBag;
-
-
 
 class TagProductController extends Controller
 {
-    public function __construct()
+    // contructor
+    public function __construct(tag $tag, TagProduct $tagProduct, Product $product)
     {
+        $this->product = $product;
+        $this->tag = $tag;
         $this->middleware('auth:admin');
+        $this->tagProduct = $tagProduct;
     }
+    /**
+     * Display a listing of the resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
     public function index($id, Request $request)
     {
-        $tag = Tag::find($id);
-        $tag_products = TagProduct::notDelete()->where('tag_id', '=', $id)
-            ->sortId($request)->status($request);
-        $count_tag_product = 0;
-        $view = 0;
-        $count_tag_product = $tag_products->count();
-        if ($request->has('view')) {
-            $view = $request->view;
-        } else {
-            $view = 10;
-        }
-        $tag_products = $tag_products->paginate($view);
-
-        // product belong to tag
-        $tag_products_array = array();
-        foreach ($tag_products as $tag_product) {
-            $tag_products_array[] = $tag_product->product_id;
-        }
-        $products = Product::notDelete()->whereIn('id', $tag_products_array)->get();
-
-        // user
-        $user = Auth::guard('admin')->user();
-        // filter
+        // parameter
         $sort_id = $request->sort_id;
         $status = $request->status;
-        return view('admin.tag.product.index', [
+        // search
+        $search = $request->search;
+        // view
+        $view = $request->has('view') ? $request->view : 10;
+        // data
+        $tag = $this->tag->find($id);
+        $tagProducts = $tag->TagProducts()->withoutTrashed();
+        $tagProducts_count = $tagProducts->count();
+        $tagProducts = $tagProducts->paginate($view);
+        return view('pages.admin.tag.product.index', [
+            'tagProducts' => $tagProducts,
             'tag' => $tag,
-            'count_tag_product' => $count_tag_product,
-            'view' => $view,
-            //
-            'products' => $products,
-            'tag_products' => $tag_products,
-            //
-            'current_user' => $user,
-            // filter
+            // parameter
             'sort_id' => $sort_id,
+            'search' => $search,
             'status' => $status,
+            'search' => $search,
+            'view' => $view,
+            'tagProducts_count' => $tagProducts_count,
         ]);
     }
 
-    public function doActivate($id, $product_id)
+    /**
+     * Verify an item.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function verify($id, $product_id, $verified)
     {
-        $tag_product = TagProduct::find($product_id);
-        $tag_product->is_actived = 1;
-        if ($tag_product->save()) {
-            return back()->with('success', 'Item #' . $tag_product->id . ' has been activated.');
-        } else {
-            return back()->with('error', 'Error occurred!');
-        }
+        //
+        $verify = $this->tagProduct->find($product_id)->update([
+            'verified' => $verified,
+        ]);
+        if ($verified == 0)
+            return back()->with('success', 'Sản phẩm #' . $product_id . ' đã được tắt .');
+        else
+            return back()->with('success', 'Sản phẩm #' . $product_id . ' đã được bật.');
     }
 
-    public function doDeactivate($id, $product_id)
+    /**
+     * Show the form for creating a new resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function create($id)
     {
-        $tag_product = TagProduct::find($product_id);
-        $tag_product->is_actived = 0;
-        if ($tag_product->save()) {
-            return back()->with('success', 'Item #' . $tag_product->id . ' has been deactivated.');
-        } else {
-            return back()->with('error', 'Error occurred!');
-        }
-    }
-
-    public function doRemove($id, $product_id)
-    {
-        $tag_product = TagProduct::find($product_id);
-        $tag_product->is_deleted = 1;
-        if ($tag_product->save()) {
-            return back()->with('success', 'tag\'s product #' . $tag_product->id . ' has been removed.');
-        } else {
-            return back()->with('error', 'Error occurred!');
-        }
-    }
-
-    public function doRestore($id, $product_id)
-    {
-        $tag_product = TagProduct::find($product_id);
-        $tag_product->is_deleted = 0;
-        if ($tag_product->save()) {
-            return back()->with('success', 'Tag\'s product #' . $tag_product->id . ' has been restored.');
-        } else {
-            return back()->with('error', 'Error occurred!');
-        }
-    }
-
-    public function doDelete($id, $product_id)
-    {
-        $tag_product = TagProduct::find($product_id);
-        if ($tag_product->forceDelete()) {
-            return back()->with('success', 'Tag\'s product #' . $tag_product->id . ' has been deleted.');
-        } else {
-            return back()->with('error', 'Error occurred!');
-        }
-    }
-
-    public function add($id)
-    {
-        $tag = Tag::find($id);
-        $tag_products = TagProduct::notDelete()->where('tag_id', $id)->get();
-        $tag_products_array = array();
-        foreach ($tag_products as $tag_product) {
-            $tag_products_array[] = $tag_product->product_id;
-        }
-        $products = Product::notDelete()->whereNotIn('id', $tag_products_array)->get();
-        // user
-        $user = Auth::guard('admin')->user();
-        return view('admin.tag.product.add', [
-            'tag' => $tag,
+        //
+        $tag = $this->tag->find($id);
+        $products = $this->product->all();
+        return view('pages.admin.tag.product.create', [
             'products' => $products,
-            'tag_products' => $tag_products,
-            //
-            'current_user' => $user,
+            'tag' => $tag,
         ]);
     }
 
-    public function doAdd(Request $request)
+    /**
+     * Store a newly created resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\Response
+     */
+    public function store($id, Request $request)
     {
-        $validate = Validator::make($request->all(), [
-            'product_id_list' => 'required',
-        ], [
-            'required' => ':attribute must be filled'
+        //
+        $result = $this->tagProduct->create([
+            'tag_id' => $id,
+            'product_id' => $request->product_id,
         ]);
-        if ($validate->fails()) {
-            return response()->json([
-                'error' => true,
-                'message' => $validate->errors(),
-            ]);
-        } else {
-            foreach ($request->product_id_list as $index => $value) {
-                $tag_product = null;
-                $tag_product = new TagProduct();
-                $tag_product->tag_id = $request->id;
-                $tag_product->product_id = $value;
-                $result2 = $tag_product->save();
-                if (!$result2) {
-                    $errors = new MessageBag(['errorAddDetail' => 'Error occurred!']);
-                    return response()->json([
-                        'error' => true,
-                        'message' => $errors
-                    ]);
-                }
-            }
-            return response()->json([
-                'error' => false,
-                'message' => 'Success'
-            ]);
-        }
+        return $result ? back()->with('success', 'Sản phẩm mới được gắn thẻ thành công.') : back()->with('error', 'Lỗi xảy ra trong quá trình thêm Sản phẩm vào thẻ');
     }
 
+    /**
+     * Display the specified resource.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function show($id)
+    {
+        //
+    }
+
+    /**
+     * Show the form for editing the specified resource.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
     public function edit($id, $product_id)
     {
-        $tag = Tag::find($id);
-        $tag_products = TagProduct::notDelete()->where('tag_id', $id)->get();
-        $tag_products_array = array();
-        foreach ($tag_products as $tag_product) {
-            $tag_products_array[] = $tag_product->product_id;
-        }
-        $products = Product::notDelete()->whereNotIn('id', $tag_products_array)->get();
-
-        $tag_product = TagProduct::find($product_id);
-        $product = Product::find($tag_product->product_id);
-        // user
-        $user = Auth::guard('admin')->user();
-        return view('admin.tag.product.edit', [
+        //
+        $tag = $this->tag->find($id);
+        $products = $this->product->all();
+        $tagProduct = $this->tagProduct->find($product_id);
+        return view('pages.admin.tag.product.edit', [
             'tag' => $tag,
+            'tagProduct' => $tagProduct,
             'products' => $products,
-            'tag_product' => $tag_product,
-            'product' => $product,
-            //
-            'current_user' => $user,
         ]);
-    }
-    public function doEdit($id,Request $request)
-    {
-        $validate = Validator::make($request->all(), [
-            'tag_product_id' => 'required',
-            'product_id' => 'required',
-        ], [
-            'required' => ':attribute must be filled'
-        ]);
-        if ($validate->fails()) {
-            return response()->json([
-                'error' => true,
-                'message' => $validate->errors(),
-            ]);
-        } else {
-            $tag_product = TagProduct::find($request->tag_product_id);
-            $tag_product->product_id = $request->product_id;
-            $result = $tag_product->save();
-            if ($result) {
-                return response()->json([
-                    'error' => false,
-                    'message' => 'Success'
-                ]);
-            } else {
-                $errors = new MessageBag(['errorEdit' => 'Error occurred!']);
-                return response()->json([
-                    'error' => true,
-                    'message' => $errors
-                ]);
-            }
-        }
     }
 
+    /**
+     * Update the specified resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function update(Request $request, $id, $product_id)
+    {
+        //
+        $tagProduct = $this->tagProduct->find($product_id);
+        $result = $tagProduct->update([
+            'tag_id' => $id,
+            'product_id' => $request->product_id,
+        ]);
+        return $result ? back()->with('success', 'Sản phẩm #' . $product_id . ' đã được cập nhật thẻ.') : back()->with('error', 'Lỗi xảy ra khi cập nhật Sản phẩm #' . $product_id);
+    }
+
+    /**
+     * Softdelete the specified resource from storage.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function delete($id, $product_id)
+    {
+        $tagProduct = $this->tagProduct->find($product_id);
+        $result = $tagProduct->delete();
+        return $result ? back()->withSuccess('Sản phẩm #' . $product_id . ' đã bị loại bỏ.') : back()->withError('Xảy ra lỗi khi loại bỏ Sản phẩm #' . $product_id);
+    }
+
+
+    /**
+     * Display a listing of the softdeleted resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
     public function recycle($id, Request $request)
     {
-        $tag = Tag::find($id);
-        $tag_products = TagProduct::softDelete()->where('tag_id', '=', $id)
-            ->sortId($request)->status($request);
-        $count_tag_product = 0;
-        $view = 0;
-        $count_tag_product = $tag_products->count();
-        if ($request->has('view')) {
-            $view = $request->view;
-        } else {
-            $view = 10;
-        }
-        $tag_products = $tag_products->paginate($view);
-
-        // product belong to tag
-        $tag_products_array = array();
-        foreach ($tag_products as $tag_product) {
-            $tag_products_array[] = $tag_product->product_id;
-        }
-        $products = Product::notDelete()->whereIn('id', $tag_products_array)->get();
-
-        // user
-        $user = Auth::guard('admin')->user();
-        // filter
+        // parameter
         $sort_id = $request->sort_id;
         $status = $request->status;
-        return view('admin.tag.product.recycle', [
+        // search
+        $search = $request->search;
+        // view
+        $view = $request->has('view') ? $request->view : 10;
+        // data
+        $tag = $this->tag->find($id);
+        $tagProducts = $tag->TagProducts()->onlyTrashed();
+        $tagProducts_count = $tagProducts->count();
+        $tagProducts = $tagProducts->paginate($view);
+        return view('pages.admin.tag.product.recycle', [
+            'tagProducts' => $tagProducts,
             'tag' => $tag,
-            'count_tag_product' => $count_tag_product,
-            'view' => $view,
-            //
-            'products' => $products,
-            'tag_products' => $tag_products,
-            //
-            'current_user' => $user,
-            // filter
+            // parameter
             'sort_id' => $sort_id,
+            'search' => $search,
             'status' => $status,
+            'search' => $search,
+            'view' => $view,
+            'tagProducts_count' => $tagProducts_count,
         ]);
     }
 
-    public function bulk_action(Request $request)
+    /**
+     * Restore the specified resource from storage.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function restore($id, $product_id)
     {
-        if ($request->has('bulk_action') && $request->bulk_action != null) {
-            if ($request->has('tag_product_id_list')) {
+        $result = $this->tagProduct->onlyTrashed()->find($product_id)->restore();
+        return $result ? back()->withSuccess('Sản phẩm #' . $product_id . ' đã được phục hồi.') : back()->withError('Lỗi xảy ra trong quá trình khôi phục Sản phẩm #' . $product_id);
+    }
+
+    /**
+     * Remove the specified resource from storage.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function destroy($id, $product_id)
+    {
+        //
+        $tagProduct = $this->tagProduct->onlyTrashed()->find($product_id);
+        $result = $tagProduct->forceDelete();
+        return $result ? back()->with('success', 'Sản phẩm #' . $product_id . ' đã được xóa vĩnh viễn.') : back()->withError('Lỗi xảy trong quá trình xóa vĩnh viễn Sản phẩm #' . $product_id);
+    }
+
+    public function bulk_action($id, Request $request)
+    {
+        if ($request->has('bulk_action')) {
+            if ($request->has('tagProduct_id_list')) {
                 $message = null;
-                $error = null;
+                $errors = null;
                 switch ($request->bulk_action) {
                     case 0: // deactivate
-                        $message = 'Item ';
-                        foreach ($request->tag_product_id_list as $product_id) {
-                            $item = null;
-                            $item = TagProduct::find($product_id);
-                            $item->is_actived = 0;
-                            if ($item->save()) {
-                                $message .= ' #' . $item->id . ', ';
+                        $message = 'Sản phẩm ';
+                        foreach ($request->tagProduct_id_list as $tagProduct_id) {
+                            $tagProduct = $this->tagProduct->find($tagProduct_id);
+                            $verify = $tagProduct->update([
+                                'verified' => 0,
+                            ]);
+                            if ($verify) {
+                                $message .= ' #' . $tagProduct->id . ', ';
                             } else {
-                                return back()->with('error', 'Error occurred while deactivating item #' . $item->id);
+                                $errors[] = 'Lỗi xảy ra khi tắt Sản phẩm #' . $tagProduct->id . '.';
                             }
                         }
-                        $message .= 'have been deactivated.';
-                        return back()->with('success', $message);
+                        $message .= 'đã được tắt.';
                         break;
                     case 1: // activate
-                        $message = 'Item ';
-                        foreach ($request->tag_product_id_list as $product_id) {
-                            $item = null;
-                            $item = TagProduct::find($product_id);
-                            $item->is_actived = 1;
-                            if ($item->save()) {
-                                $message .= ' #' . $item->id . ', ';
+                        $message = 'Sản phẩm ';
+                        foreach ($request->tagProduct_id_list as $tagProduct_id) {
+                            $tagProduct = $this->tagProduct->find($tagProduct_id);
+                            $verify = $tagProduct->update([
+                                'verified' => 1,
+                            ]);
+                            if ($verify) {
+                                $message .= ' #' . $tagProduct->id . ', ';
                             } else {
-                                return back()->with('error', 'Error occurred while activating item #' . $item->id);
+                                $errors[] = 'Lỗi xảy ra khi bật Sản phẩm #' . $tagProduct->id . '.';
                             }
                         }
-                        $message .= 'have been activated.';
-                        return back()->with('success', $message);
+                        $message .= 'đã được bật.';
                         break;
                     case 2: // remove
-                        $message = 'Item ';
-                        foreach ($request->tag_product_id_list as $product_id) {
-                            $item = null;
-                            $item = TagProduct::find($product_id);
-                            $item->is_deleted = 1;
-                            if ($item->save()) {
-                                $message .= ' #' . $item->id . ', ';
+                        $message = 'Sản phẩm';
+                        foreach ($request->tagProduct_id_list as $tagProduct_id) {
+                            $tagProduct = null;
+                            $tagProduct = $this->tagProduct->find($tagProduct_id);
+                            $result = $tagProduct->delete();
+                            if ($result) {
+                                $message .= ' #' . $tagProduct->id . ', ';
                             } else {
-                                return back()->with('error', 'Error occurred while deleting item #' . $item->id);
+                                $errors[] = 'Lỗi xảy ra khi loại bỏ Sản phẩm #' . $tagProduct->id . '.';
                             }
                         }
-                        $message .= 'have been removed.';
-                        return back()->with('success', $message);
+                        $message .= 'đã được loại bỏ.';
                         break;
                     case 3: // restore
-                        $message = 'Item ';
-                        foreach ($request->tag_product_id_list as $product_id) {
-                            $item = null;
-                            $item = TagProduct::find($product_id);
-                            $item->is_deleted = 0;
-                            if ($item->save()) {
-                                $message .= ' #' . $item->id . ', ';
+                        $message = 'Sản phẩm';
+                        foreach ($request->tagProduct_id_list as $tagProduct_id) {
+                            $tagProduct = null;
+                            $tagProduct = $this->tagProduct->onlyTrashed()->find($tagProduct_id);
+                            $result = $tagProduct->restore();
+                            if ($result) {
+                                $message .= ' #' . $tagProduct->id . ', ';
                             } else {
-                                return back()->with('error', 'Error occurred while restoring item #' . $item->id);
+                                $errors[] = 'Lỗi xảy ra khi khôi phục Sản phẩm #' . $tagProduct->id . '.';
                             }
                         }
-                        $message .= 'have been restored.';
-                        return back()->with('success', $message);
+                        $message .= 'đã được khôi phục.';
                         break;
                     case 4: // delete
-                        $message = 'Item ';
-                        foreach ($request->tag_product_id_list as $product_id) {
-                            $item = null;
-                            $item = TagProduct::find($product_id);
-                            if ($item->forceDelete()) {
-                                $message .= ' #' . $item->id . ', ';
+                        $message = 'Sản phẩm';
+                        foreach ($request->tagProduct_id_list as $tagProduct_id) {
+                            $tagProduct = null;
+                            $tagProduct = $this->tagProduct->onlyTrashed()->find($tagProduct_id);
+                            $result = $tagProduct->forceDelete();
+                            if ($result) {
+                                $message .= ' #' . $tagProduct->id . ', ';
                             } else {
-                                return back()->with('error', 'Error occurred while deleting item #' . $item->id);
+                                $errors[] = 'Lỗi xảy ra khi xóa vĩnh viễn Sản phẩm #' . $tagProduct->id . '.';
                             }
                         }
-                        $message .= 'have been deleted.';
-                        return back()->with('success', $message);
+                        $message .= 'đã được xóa vĩnh viễn.';
                         break;
                 }
-                if ($error != null) {
-                    return back()->with('success', $message)->with('error', $error);
+                if ($errors != null) {
+                    return back()->withSuccess($message)->withErrors($errors);
+                } else {
+                    return back()->withSuccess($message);
                 }
-                return back()->with('success', $message);
             } else {
-                return back()->with('error', 'Please select items to take action!');
+                return back()->withError('Hãy chọn ít nhất 1 Sản phẩm để thực hiện thao tác!');
             }
         } else {
-            return back()->with('error', 'Please select an action!');
+            return back()->withError('Hãy chọn 1 thao tác cụ thể!');
         }
     }
 }

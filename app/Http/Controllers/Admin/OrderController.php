@@ -5,14 +5,13 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\DB;
 use App\Collection;
-use App\order;
-use App\Product;
-use App\User;
-use App\Address;
-use App\Ward;
-use App\District;
-use App\OrderDetail;
-use App\Province;
+use App\Models\Order;
+use App\Models\Product;
+use App\Models\User;
+use App\Models\Address;
+use App\Models\Ward;
+use App\Models\District;
+use App\Models\OrderDetail;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\File;
@@ -22,29 +21,27 @@ use Illuminate\Support\Str;
 
 class OrderController extends Controller
 {
-    public function __construct()
+    public function __construct(Order $order, OrderDetail $orderDetail, Product $product)
     {
+        $this->order = $order;
         $this->middleware('auth:admin');
+        $this->orderDetail = $orderDetail;
     }
+    /**
+     * Display a listing of the resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
     public function index(Request $request)
     {
-        $orders = Order::notDelete()->notDone()
+        $orders = $this->order->notDone()
             ->status($request)->sortId($request)->active()
             ->sortTotal($request)->sortDate($request)->sortPaid($request);
-        $count_order = 0;
-        $view = 0;
-        $count_order = $orders->count();
-        if ($request->has('view')) {
-            $view = $request->view;
-        } else {
-            $view = 10;
-        }
+        $orders_count = $orders->count();
+        $view = $request->has('view') ? $request->view : 10;
+
         $orders = $orders->paginate($view);
-        // address
-        $addresses = Address::get();
-        $wards = Ward::get();
-        $districts = District::get();
-        $provinces = Province::get();
+
         // filter
         $sort_id = $request->sort_id;
         $status = $request->status;
@@ -53,16 +50,12 @@ class OrderController extends Controller
         $sort_paid = $request->sort_paid;
         // user
         $user = Auth::guard('admin')->user();
-        return view('admin.order.index', [
+        return view('pages.admin.order.index', [
             // order
             'orders' => $orders,
-            'count_order' => $count_order,
+            'orders_count' => $orders_count,
             'view' => $view,
-            // address
-            'addresses' => $addresses,
-            'wards' => $wards,
-            'districts' => $districts,
-            'provinces' => $provinces,
+
             // filter
             'sort_id' => $sort_id,
             'sort_total' => $sort_total,
@@ -74,118 +67,79 @@ class OrderController extends Controller
 
         ]);
     }
-    public function doActivate($id)
-    {
-        $order = Order::find($id);
-        foreach ($order->order_details as $detail) {
-            $product = null;
-            $product = Product::find($detail->product_id);
-            $product->remaining -= $detail->quantity;
-            if (!$product->save()) {
-                return back()->with('error', 'Error occurred!');
-            }
-        }
-        $order->is_actived = 1;
-        if ($order->save()) {
-            return back()->with('success', 'Order #' . $order->id . ' has been activated.');
-        } else {
-            return back()->with('error', 'Error occurred!');
-        }
-    }
 
-    public function doDeactivate($id)
+    /**
+     * Verify an item.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function verify($id, $verified)
     {
-        $order = Order::find($id);
-        if ($order->is_paid == 1) {
-            return back()->with('error', 'Order #' . $order->id . ' has already been paid.');
-        } else {
-            foreach ($order->order_details as $detail) {
+        //
+        $order = $this->order->find($id);
+        $verify = $order->update([
+            'verified' => $verified,
+        ]);
+        if ($verified == 0) {
+            foreach ($order->orderDetails as $detail) {
                 $product = null;
-                $product = Product::find($detail->product_id);
-                $product->remaining += $detail->quantity;
-                if (!$product->save()) {
-                    return back()->with('error', 'Error occurred!');
-                }
+                $product = $this->product->find($detail->product_id);
+                $product = $product->update(['remaining' => $product->remaining + $detail->quantity]);
             }
-            $order->is_actived = 0;
-            if ($order->save()) {
-                return back()->with('success', 'Order #' . $order->id . ' has been deactivated.');
-            } else {
-                return back()->with('error', 'Error occurred!');
+            return back()->with('success', 'Hóa đơn #' . $id . ' đã được bật .');
+        } else {
+            foreach ($order->orderDetails as $detail) {
+                $product = null;
+                $product = $this->product->find($detail->product_id);
+                $product = $product->update(['remaining' => $product->remaining - $detail->quantity]);
             }
+            return back()->with('success', 'Hóa đơn #' . $id . ' đã được tắt.');
         }
     }
 
-    public function doConfirm($id)
+    public function comfirm($id, $confirmed)
     {
-        $order = Order::find($id);
-        if ($order->is_paid == 0) {
-            return back()->with('error', 'Order #' . $order->id . ' hasn\'t been paid yet.');
+        //
+        $order = $this->order->find($id);
+        if ($confirmed == 0) {
+            $confirmation = $order->update([
+                'delivered_at' => null,
+                'done' => $confirmed,
+            ]);
+            return back()->withSuccess('Hóa đơn #' . $id . ' chưa được xác nhận và hoàn tất');
         } else {
-            $order->is_done = 1;
-            $order->delivery_date = date('Y-m-d');
-            $order->status = 3;
-            if ($order->save()) {
-                return back()->with('success', 'Order #' . $order->id . ' has been completed.');
-            } else {
-                return back()->with('error', 'Error occurred!');
-            }
+            if (!$order->done)
+                return back()->withError('Hóa đơn  #' . $id . ' chưa được thanh toán, không thể xác nhận');
+            else
+                $confirmation = $order->update([
+                    'delivered_at' => date("Y-m-d H:i:s"),
+                    'done' => $confirmed,
+                ]);
+            return back()->withSuccess('Hóa đơn  #' . $id . ' đã được xác nhận và hoàn tất');
         }
     }
 
-    public function doUnConfirm($id)
+    public function pay($id, $paid)
     {
-        $order = Order::find($id);
-        $order->delivery_date = null;
-        $order->is_done = 0;
-        if ($order->save()) {
-            return back()->with('success', 'Order #' . $order->id . ' has been delayed.');
-        } else {
-            return back()->with('error', 'Error occurred!');
-        }
-    }
-
-    public function doPaid($id)
-    {
-        $order = Order::find($id);
-        $order->is_paid = 1;
-        if ($order->save()) {
-            return back()->with('success', 'Order #' . $order->id . ' has been paid.');
-        } else {
-            return back()->with('error', 'Error occurred!');
-        }
-    }
-
-    public function doUnPaid($id)
-    {
-        $order = Order::find($id);
-        $order->is_paid = 0;
-        if ($order->save()) {
-            return back()->with('success', 'Order #' . $order->id . ' hasn\'t been paid yet.');
-        } else {
-            return back()->with('error', 'Error occurred!');
-        }
+        //
+        $order = $this->order->find($id);
+        $confirmation = $order->update([
+            'paid' => $paid,
+        ]);
+        if ($paid == 0)
+            return back()->withSuccess('Hóa đơn #' . $id . ' chưa được thanh toán');
+        else
+            return back()->withSuccess('Hóa đơn  #' . $id . ' đã được thanh toán');
     }
 
     public function history(Request $request)
     {
-        $orders = Order::notDelete()
+        $orders =  $this->order
             ->status($request)->sortId($request)->done()
             ->sortTotal($request)->sortDate($request)->sortPaid($request);
-        $count_order = 0;
-        $view = 0;
-        $count_order = $orders->count();
-        if ($request->has('view')) {
-            $view = $request->view;
-        } else {
-            $view = 10;
-        }
-        $orders = $orders->paginate($view);
-        // address
-        $addresses = Address::get();
-        $wards = Ward::get();
-        $districts = District::get();
-        $provinces = Province::get();
+            $orders_count = $orders->count();
+            $view = $request->has('view') ? $request->view : 10;
+
         // filter
         $sort_id = $request->sort_id;
         $status = $request->status;
@@ -194,16 +148,12 @@ class OrderController extends Controller
         $sort_paid = $request->sort_paid;
         // user
         $user = Auth::guard('admin')->user();
-        return view('admin.order.history', [
+        return view('pages.admin.order.history', [
             // order
             'orders' => $orders,
-            'count_order' => $count_order,
+            'orders_count' => $orders_count,
             'view' => $view,
-            // address
-            'addresses' => $addresses,
-            'wards' => $wards,
-            'districts' => $districts,
-            'provinces' => $provinces,
+
             // filter
             'sort_id' => $sort_id,
             'sort_total' => $sort_total,
@@ -217,23 +167,13 @@ class OrderController extends Controller
 
     public function cancel(Request $request)
     {
-        $orders = Order::notDelete()
+        $orders = $this->order
             ->status($request)->sortId($request)->inactive()
             ->sortTotal($request)->sortDate($request)->sortPaid($request);
-        $count_order = 0;
-        $view = 0;
-        $count_order = $orders->count();
-        if ($request->has('view')) {
-            $view = $request->view;
-        } else {
-            $view = 10;
-        }
+            $orders_count = $orders->count();
+            $view = $request->has('view') ? $request->view : 10;
         $orders = $orders->paginate($view);
-        // address
-        $addresses = Address::get();
-        $wards = Ward::get();
-        $districts = District::get();
-        $provinces = Province::get();
+
         // filter
         $sort_id = $request->sort_id;
         $status = $request->status;
@@ -245,13 +185,9 @@ class OrderController extends Controller
         return view('admin.order.cancel', [
             // order
             'orders' => $orders,
-            'count_order' => $count_order,
+            'orders_count' => $orders_count,
             'view' => $view,
-            // address
-            'addresses' => $addresses,
-            'wards' => $wards,
-            'districts' => $districts,
-            'provinces' => $provinces,
+
             // filter
             'sort_id' => $sort_id,
             'sort_total' => $sort_total,
@@ -263,35 +199,16 @@ class OrderController extends Controller
         ]);
     }
 
-    public function detail($id)
+    public function edit($id)
     {
-        $order = Order::find($id);
-        $user = User::where('is_deleted', 0)->where('id', $order->user_id);
-        // address
-        $addresses = Address::get();
-        $wards = Ward::get();
-        $districts = District::get();
-        $provinces = Province::get();
-        // order detail
-        $order_details = OrderDetail::where('order_id', $order->id)->get();
-        $order_details_array = array();
-        foreach ($order_details as $detail) {
-            $order_details_array[] = $detail->product_id;
-        }
-        $order_detail_products = Product::where('is_deleted', 0)->whereIn('id', $order_details_array)->get();
+        $order = $this->order->find($id);
+
         // user
         $user = Auth::guard('admin')->user();
         return view('admin.order.detail', [
             // order
             'order' => $order,
-            'order_details' => $order_details,
-            'order_detail_products' => $order_detail_products,
             'current_user' => $user,
-            // address
-            'addresses' => $addresses,
-            'wards' => $wards,
-            'districts' => $districts,
-            'provinces' => $provinces,
             //
             'current_user' => $user,
 
@@ -300,40 +217,7 @@ class OrderController extends Controller
 
     public function update(Request $request)
     {
-        $validate = Validator::make(
-            $request->all(),
-            [
-                'status' => 'required|min:0|max:3',
-
-            ],
-            [
-                'required' => ':attribute must be filled',
-                'min' => ':attribute is invalid',
-                'max' => ':attribute is invalid'
-            ]
-        );
-        if ($validate->fails()) {
-            return response()->json([
-                'error' => true,
-                'message' => $validate->errors(),
-            ]);
-        } else {
-            $order = Order::find($request->id);
-            $order->status = $request->status;
-            $order->is_paid = $request->payment;
-            $result = $order->save();
-            if ($result) {
-                return response()->json([
-                    'error' => false,
-                    'message' => 'Success'
-                ]);
-            } else {
-                return response()->json([
-                    'error' => true,
-                    'message' => 'Error occurred'
-                ]);
-            }
-        }
+        
     }
 
     public function doRemove($id)

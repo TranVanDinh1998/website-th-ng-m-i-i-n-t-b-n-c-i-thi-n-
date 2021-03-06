@@ -2,10 +2,9 @@
 
 namespace App\Exceptions;
 
-use Exception;
+use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Support\Arr;
-use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
 use Throwable;
 
 class Handler extends ExceptionHandler
@@ -25,21 +24,21 @@ class Handler extends ExceptionHandler
      * @var array
      */
     protected $dontFlash = [
+        'current_password',
         'password',
         'password_confirmation',
     ];
 
     /**
-     * Report or log an exception.
+     * Register the exception handling callbacks for the application.
      *
-     * @param  \Throwable  $exception
      * @return void
-     *
-     * @throws \Throwable
      */
-    public function report(Throwable $exception)
+    public function register()
     {
-        parent::report($exception);
+        $this->reportable(function (Throwable $e) {
+            //
+        });
     }
 
     /**
@@ -66,14 +65,15 @@ class Handler extends ExceptionHandler
 
        switch ($guard) {
          case 'admin':
-           $login='admin.auth.login';
+           $login='auth.admin.index';
            break;
 
          default:
-           $login='login';
+           $login='auth.customer.index';
            break;
        }
 
         return redirect()->guest(route($login));
     }
 }
+

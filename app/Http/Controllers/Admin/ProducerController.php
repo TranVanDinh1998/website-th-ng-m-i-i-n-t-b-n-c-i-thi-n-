@@ -3,383 +3,318 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Support\Facades\DB;
-use App\Producer;
-use App\Product;
-use App\Collection;
-use Illuminate\Support\MessageBag;
-use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Str;
-use Illuminate\Support\Facades\File;
+use App\Http\Helpers\RemoveImage;
+use App\Http\Helpers\UploadImage;
+use App\Http\Requests\GeneralRequest;
+use App\Http\Requests\ProducerRequest;
+use App\Models\Producer;
 use Illuminate\Http\Request;
 
 class ProducerController extends Controller
 {
-    public function __construct()
+    // contructor
+    public function __construct(Producer $producer)
     {
         $this->middleware('auth:admin');
+        $this->producer = $producer;
     }
+    /**
+     * Display a listing of the resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
     public function index(Request $request)
     {
-        // producers
-        $producers = producer::notDelete()->search($request)->sortId($request)->status($request);
-        $count_producer = 0;
-        $view = 0;
-        $count_producer = $producers->count();
-        if ($request->has('view')) {
-            $view = $request->view;
-        } else {
-            $view = 10;
-        }
-        $producers = $producers->paginate($view);
-        // filter
+        // parameter
         $sort_id = $request->sort_id;
+        $search = $request->search;
         $status = $request->status;
         // search
         $search = $request->search;
-        // user
-        $user = Auth::guard('admin')->user();
-        return view('admin.producer.index', [
-            // producers
+        // view
+        $view = $request->has('view') ? $request->view : 10;
+        // data
+        $producers = $this->producer->search($request)->sortId($request)->status($request);
+        $producers_count = $producers->count();
+        $producers = $producers->paginate($view);
+        return view('pages.admin.producer.index', [
             'producers' => $producers,
-            'count_producer' =>$count_producer,
-            'view' => $view,
-            // filter
+            // parameter
             'sort_id' => $sort_id,
-            'status' => $status,
-            // search
             'search' => $search,
-            'current_user' => $user,
+            'status' => $status,
+            'search' => $search,
+            'view' => $view,
+            'producers_count' => $producers_count,
         ]);
     }
 
-    public function doActivate($id)
+    /**
+     * Verify an item.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function verify($id, $verified)
     {
-        $producer = Producer::find($id);
-        $producer->is_actived = 1;
-        if ($producer->save()) {
-            return back()->with('success', 'Producer #' . $producer->id . ' has been activated.');
-        } else {
-            return back()->with('error', 'Error occurred!');
-        }
+        //
+        $verify = $this->producer->find($id)->update([
+            'verified' => $verified,
+        ]);
+        if ($verified == 0)
+            return back()->with('success', 'Hãng #' . $id . ' đã được tắt .');
+        else
+            return back()->with('success', 'Hãng #' . $id . ' đã được bật.');
     }
 
-    public function doDeactivate($id)
+    /**
+     * Show the form for creating a new resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function create()
     {
-        $producer = Producer::find($id);
-        $producer->is_actived = 0;
-        if ($producer->save()) {
-            return back()->with('success', 'Producer #' . $producer->id . ' has been deactivated.');
-        } else {
-            return back()->with('error', 'Error occurred!');
-        }
-    }
-
-    public function add()
-    {
-        // user
-        $user = Auth::guard('admin')->user();
-        return view('admin.producer.add', [
-            'current_user' => $user,
-
+        //
+        return view('pages.admin.producer.create', [
         ]);
     }
 
-    public function doAdd(Request $request)
+    /**
+     * Store a newly created resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\Response
+     */
+    public function store(ProducerRequest $request, UploadImage $uploadImage)
     {
-        // return $request->all();
-
-        $validate = Validator::make(
-            $request->all(),
-            [
-                'name' => 'required',
-                'image' => 'required|image',
-            ],
-            [
-                'required' => ':attribute must be filled',
-                'image' => ':attribute must be an image'
-            ]
-        );
-        if ($validate->fails()) {
-            return response()->json([
-                'error' => true,
-                'message' => $validate->errors(),
-            ]);
-        } else {
-            $producer = new Producer();
-            $producer->name = $request->name;
-            $producer->email = $request->email;
-            $producer->address = $request->address;
-            $producer->number = $request->number;
-            $result = $producer->save();
-            if ($result) {
-                if ($request->hasFile('image')) {
-                    $file = $request->file('image');
-                    $format = $file->getClientOriginalExtension();
-                    if ($format != 'jpg' && $format != 'png' && $format != 'jpeg') {
-                        $errors = new MessageBag(['errorImage' => 'File is not an image!']);
-                        return response()->json([
-                            'error' => true,
-                            'message' => $errors,
-                        ]);
-                    }
-                    $name = $file->getClientOriginalName();
-                    $avatar = Str::random(4) . "_" . $name;
-                    while (file_exists("/uploads/producers-images/" . $avatar)) {
-                        $avatar = Str::random(4) . "_" . $name;
-                    }
-                    $file->move(public_path() . '/uploads/producers-images/', $avatar);
-                    $producer->image = $avatar;
-                } else {
-                    $producer->image = null;
-                }
-                $result = $producer->save();
-                return response()->json([
-                    'error' => false,
-                    'message' => 'Success'
-                ]);
-            } else {
-                $errors = new MessageBag(['errorAdd' => 'Error occurred!']);
-                return response()->json([
-                    'error' => true,
-                    'message' => $errors
-                ]);
-            }
+        //
+        $avatar = null;
+        if ($request->hasFile('image')) {
+            $avatar = $this->producer->uploadImage($request->image, $uploadImage);
         }
+        $result = $this->producer->create([
+            'name' => $request->name,
+            'image' => $avatar,
+        ]);
+        return $result ? back()->with('success', 'Hãng mới được khởi tạo thành công.') : back()->with('error', 'Lỗi xảy ra trong quá trình khởi tạo Hãng mới.');
     }
 
+    /**
+     * Display the specified resource.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function show($id)
+    {
+        //
+    }
+
+    /**
+     * Show the form for editing the specified resource.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
     public function edit($id)
     {
-        // user
-        $user = Auth::guard('admin')->user();
-        $producer =  Producer::find($id);
-        return view('admin.producer.edit', [
+        //
+        $producer = $this->producer->find($id);
+        return view('pages.admin.producer.edit', [
             'producer' => $producer,
-            'current_user' => $user,
         ]);
     }
 
-    public function doEdit(Request $request)
+    /**
+     * Update the specified resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function update(ProducerRequest $request, $id, UploadImage $uploadImage)
     {
-        $validate = Validator::make(
-            $request->all(),
-            [
-                'id' => 'required',
-                'name' => 'required',
-            ],
-            [
-                'required' => ':attribute must be filled',
-            ]
-        );
-        if ($validate->fails()) {
-            return response()->json([
-                'error' => true,
-                'message' => $validate->errors(),
-            ]);
+        //
+        $avatar = null;
+        $producer = $this->producer->find($id);
+        if ($request->hasFile('image')) {
+            $avatar = $this->producer->uploadImage($request->image, $uploadImage);
         } else {
-            $producer = Producer::find($request->id);
-            $producer->name = $request->name;
-            $producer->email = $request->email;
-            $producer->address = $request->address;
-            $producer->number = $request->number;
-            if ($request->hasFile('image')) {
-                $file = $request->file('image');
-                $format = $file->getClientOriginalExtension();
-                if ($format != 'jpg' && $format != 'png' && $format != 'jpeg') {
-                    $errors = new MessageBag(['errorImage' => 'File is not an image!']);
-                    return response()->json([
-                        'error' => true,
-                        'message' => $errors,
-                    ]);
-                }
-                $name = $file->getClientOriginalName();
-                $avatar = Str::random(4) . "_" . $name;
-                while (file_exists("/uploads/producers-images/" . $avatar)) {
-                    $avatar = Str::random(4) . "_" . $name;
-                }
-                $file->move(public_path() . '/uploads/producers-images/', $avatar);
-                $producer->image = $avatar;
-            }
-            $result = $producer->save();
-            if ($result) {
-                return response()->json([
-                    'error' => false,
-                    'message' => 'Success'
-                ]);
-            } else {
-                $errors = new MessageBag(['errorEdit' => 'Error occurred!']);
-                return response()->json([
-                    'error' => true,
-                    'message' => $errors
-                ]);
-            }
+            $avatar = $producer->image;
         }
-    }
-    public function doRemove($id)
-    {
-        $producer = Producer::find($id);
-        $count_products = Product::where('producer_id', $producer->id)->count();
-        if ($count_products == 0) {
-            $producer->is_deleted = 1;
-            $producer->save();
-            if ($producer->save()) {
-                return back()->with('success', 'Producer #' . $producer->id . ' has been removed.');
-            } else {
-                return back()->with('error', 'Error occurred!');
-            }
-        } else {
-            return back()->with('error', 'This Producer relates to  ' . $count_products . ' products');
-        }
+        $result = $producer->update([
+            'name' => $request->name,
+            'image' => $avatar,
+        ]);
+        return $result ? back()->with('success', 'Hãng #' . $producer->id . ' đã được cập nhật.') : back()->with('error', 'Lỗi xảy ra khi cập nhật Hãng #' . $id);
     }
 
+    /**
+     * Softdelete the specified resource from storage.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function delete($id)
+    {
+        $producer = $this->producer->find($id);
+        $result = $producer->delete();
+        return $result ? back()->withSuccess('Hãng #' . $id . ' đã bị loại bỏ.') : back()->withError('Xảy ra lỗi khi loại bỏ Hãng #' . $id);
+    }
+
+
+    /**
+     * Display a listing of the softdeleted resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
     public function recycle(Request $request)
     {
-        // producers
-        $producers = producer::softDelete()->search($request)->sortId($request)->status($request);
-        $count_producer = 0;
-        $view = 0;
-        $count_producer = $producers->count();
-        if ($request->has('view')) {
-            $view = $request->view;
-        } else {
-            $view = 10;
-        }
-        $producers = $producers->paginate($view);
-        // filter
+        // parameter
         $sort_id = $request->sort_id;
+        $search = $request->search;
         $status = $request->status;
         // search
         $search = $request->search;
-        // user
-        $user = Auth::guard('admin')->user();
-        return view('admin.producer.recycle', [
-            // producers
+        // view
+        $view = $request->has('view') ? $request->view : 10;
+        // data
+        $producers = $this->producer->onlyTrashed()->search($request)->sortId($request)->status($request);
+        $producers_count = $producers->count();
+        $producers = $producers->paginate($view);
+        return view('pages.admin.producer.recycle', [
             'producers' => $producers,
-            'count_producer' =>$count_producer,
-            'view' => $view,
-            // filter
+            // parameter
             'sort_id' => $sort_id,
-            'status' => $status,
-            // search
             'search' => $search,
-            //
-            'current_user' => $user,
+            'status' => $status,
+            'search' => $search,
+            'view' => $view,
+            'producers_count' => $producers_count,
         ]);
     }
 
-    public function doRestore($id)
+    /**
+     * Restore the specified resource from storage.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function restore($id)
     {
-        $producer = Producer::find($id);
-        $producer->is_deleted = 0;
-        $producer->save();
-        if ($producer->save()) {
-            return back()->with('success', 'Producer #' . $producer->id . ' has been restored.');
-        } else {
-            return back()->with('error', 'Error occurred!');
-        }
+        $result = $this->producer->onlyTrashed()->find($id)->restore();
+        return $result ? back()->withSuccess('Hãng #' . $id . ' đã được phục hồi.') : back()->withError('Lỗi xảy ra trong quá trình khôi phục Hãng #' . $id);
     }
 
-    public function doDelete($id)
+    /**
+     * Remove the specified resource from storage.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function destroy($id, RemoveImage $removeImage)
     {
-        $producer = Producer::find($id);
-        if ($producer->forceDelete()) {
-            return back()->with('success', 'Producer #' . $producer->id . ' has been deleted.');
-        } else {
-            return back()->with('error', 'Error occurred!');
-        }
+        //
+        $producer = $this->producer->onlyTrashed()->find($id);
+        $this->producer->removeImage($producer->image, $removeImage);
+        $result = $producer->forceDelete();
+        return $result ? back()->with('success', 'Hãng #' . $id . ' đã được xóa vĩnh viễn.') : back()->withError('Lỗi xảy trong quá trình xóa vĩnh viễn Hãng #' . $id);
     }
-    public function bulk_action(Request $request)
+
+    public function bulk_action(Request $request, RemoveImage $removeImage)
     {
         if ($request->has('bulk_action')) {
             if ($request->has('producer_id_list')) {
                 $message = null;
+                $errors = null;
                 switch ($request->bulk_action) {
                     case 0: // deactivate
-                        $message = 'Producer ';
+                        $message = 'Hãng ';
                         foreach ($request->producer_id_list as $producer_id) {
-                            $producer = null;
-                            $producer = Producer::find($producer_id);
-                            $producer->is_actived = 0;
-                            if ($producer->save()) {
+                            $producer = $this->producer->find($producer_id);
+                            $verify = $producer->update([
+                                'verified' => 0,
+                            ]);
+                            if ($verify) {
                                 $message .= ' #' . $producer->id . ', ';
                             } else {
-                                return back()->with('error', 'Error occurred when deactivate producer #' . $producer->id);
+                                $errors[] = 'Lỗi xảy ra khi tắt Hãng #' . $producer->id . '.';
                             }
                         }
-                        $message .= 'have been deactivated.';
-                        return back()->with('success', $message);
+                        $message .= 'đã được tắt.';
                         break;
                     case 1: // activate
-                        $message = 'Producer ';
+                        $message = 'Hãng ';
                         foreach ($request->producer_id_list as $producer_id) {
-                            $producer = null;
-                            $producer = Producer::find($producer_id);
-                            $producer->is_actived = 1;
-                            if ($producer->save()) {
+                            $producer = $this->producer->find($producer_id);
+                            $verify = $producer->update([
+                                'verified' => 1,
+                            ]);
+                            if ($verify) {
                                 $message .= ' #' . $producer->id . ', ';
                             } else {
-                                return back()->with('error', 'Error occurred when activate producer #' . $producer->id);
+                                $errors[] = 'Lỗi xảy ra khi bật Hãng #' . $producer->id . '.';
                             }
                         }
-                        $message .= 'have been activated.';
-                        return back()->with('success', $message);
+                        $message .= 'đã được bật.';
                         break;
                     case 2: // remove
-                        $message = 'Producer';
+                        $message = 'Hãng';
                         foreach ($request->producer_id_list as $producer_id) {
                             $producer = null;
-                            $producer = producer::find($producer_id);
-                            $count_relative_product = Product::where('producer_id', $producer_id)->count();
-                            if ($count_relative_product == 0) {
-                                $producer->is_deleted = 1;
-                                if ($producer->save()) {
-                                    $message .= ' #' . $producer->id . ', ';
-                                } else {
-                                    return back()->with('error', 'Error occurred when remove producer #' . $producer->id);
-                                }
-                            } else {
-                                return back()->with('error', 'producer #' . $producer->id . ' relates to ' . $count_relative_product . ' products.');
+                            $producer = $this->producer->find($producer_id);
+                            $result = $producer->delete();
+                            if ($result) {
+                                $message .= ' #' . $producer->id . ', ';
+                            }
+                            else {
+                                $errors[] = 'Lỗi xảy ra khi loại bỏ Hãng #' . $producer->id . '.';
                             }
                         }
-                        $message .= 'have been removed.';
+                        $message .= 'đã được loại bỏ.';
                         break;
                     case 3: // restore
-                        $message = 'Producer ';
+                        $message = 'Hãng';
                         foreach ($request->producer_id_list as $producer_id) {
                             $producer = null;
-                            $producer = producer::find($producer_id);
-                            $producer->is_deleted = 0;
-                            if ($producer->save()) {
+                            $producer = $this->producer->onlyTrashed()->find($producer_id);
+                            $result = $producer->restore();
+                            if ($result) {
                                 $message .= ' #' . $producer->id . ', ';
-                            } else {
-                                return back()->with('error', 'Error occurred when restore producer #' . $producer->id);
+                            }
+                            else {
+                                $errors[] = 'Lỗi xảy ra khi khôi phục Hãng #' . $producer->id . '.';
                             }
                         }
-                        $message .= 'have been restored.';
-                        return back()->with('success', $message);
+                        $message .= 'đã được khôi phục.';
                         break;
                     case 4: // delete
-                        $message = 'Producer ';
+                        $message = 'Hãng';
                         foreach ($request->producer_id_list as $producer_id) {
                             $producer = null;
-                            $producer = producer::find($producer_id);
-                            if ($producer->forceDelete()) {
+                            $producer = $this->producer->onlyTrashed()->find($producer_id);
+                            $this->producer->removeImage($producer->image, $removeImage);
+                            $result = $producer->forceDelete();
+                            if ($result) {
                                 $message .= ' #' . $producer->id . ', ';
-                            } else {
-                                return back()->with('error', 'Error occurred when deleted producer #' . $producer->id);
+                            }
+                            else {
+                                $errors[] = 'Lỗi xảy ra khi xóa vĩnh viễn Hãng #' . $producer->id . '.';
                             }
                         }
-                        $message .= 'have been deleted.';
-                        return back()->with('success', $message);
+                        $message .= 'đã được xóa vĩnh viễn.';
                         break;
                 }
-                return back()->with('success', $message);
+                if ($errors != null) {
+                    return back()->withSuccess($message)->withErrors($errors);
+                }
+                else {
+                    return back()->withSuccess($message);
+                }
             } else {
-                return back()->with('error', 'Please select producers to take action!');
+                return back()->withError('Hãy chọn ít nhất 1 Hãng để thực hiện thao tác!');
             }
         } else {
-            return back()->with('error', 'Please select an action!');
+            return back()->withError('Hãy chọn 1 thao tác cụ thể!');
         }
     }
 }

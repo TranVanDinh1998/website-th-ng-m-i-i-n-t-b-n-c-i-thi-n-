@@ -1,16 +1,46 @@
 <?php
 
-namespace App;
+namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Order extends Model
 {
-    //
-    protected $table = 'orders';
-    public $timestamps = false;
+    use HasFactory;
+    use SoftDeletes;
+    protected $fillable = [
+        'id',
+        'user_id',
+        'discount',
+        'sub_total',
+        'total',
+        'status',
+        'paid',
+        'done',
+        'verified',
+        'delivered_at',
+        'created_at',
+        'updated_at',
+        'deleted_at',
+    ];
 
+    public function orderDetails() {
+        return $this->hasMany(OrderDetail::class);
+    }
+    public function shippingAddress() {
+        return $this->hasOne(ShippingAddress::class);
+    }
+    public function user() {
+        return $this->hasOne(User::class);
+    }
+    
     // filter
+    public function scopeLatest($q)
+    {
+        return $q->orderByDesc('created_at');
+    }
     public function scopeSortId($query, $request)
     {
         if ($request->has('sort_id') && $request->sort_id != null) {
@@ -23,9 +53,59 @@ class Order extends Model
                     break;
             }
         }
+        else {
+            $query->orderBy('id', 'desc');
+        }
+        return $query;
+    }
+    
+    public function scopeSortTotal($query, $request)
+    {
+        if ($request->has('sort_total') && $request->sort_id != null) {
+            switch ($request->sort_id) {
+                case 0:
+                    $query->orderBy('total', 'asc');
+                    break;
+                case 1:
+                    $query->orderBy('total', 'desc');
+                    break;
+            }
+        }
         return $query;
     }
 
+    public function scopeSortDate($query, $request)
+    {
+        if ($request->has('sort_date') && $request->sort_id != null) {
+            switch ($request->sort_id) {
+                case 0:
+                    $query->orderBy('created_at', 'asc');
+                    break;
+                case 1:
+                    $query->orderBy('created_at', 'desc');
+                    break;
+            }
+        }
+        else {
+            $query->orderBy('created_at', 'desc');
+        }
+        return $query;
+    }
+
+    public function scopeSortPaid($query, $request)
+    {
+        if ($request->has('sort_paid') && $request->sort_id != null) {
+            switch ($request->sort_id) {
+                case 0:
+                    $query->where('paid',0);
+                    break;
+                case 1:
+                    $query->where('paid', 1);
+                    break;
+            }
+        }
+        return $query;
+    }
     public function scopeStatus($query, $request)
     {
         if ($request->has('status') && $request->status != null) {
@@ -49,37 +129,37 @@ class Order extends Model
 
     public function scopeActive($query)
     {
-        $query->where('is_actived', 1);
+        $query->where('verified', 1);
         return $query;
     }
 
     public function scopeInactive($query)
     {
-        $query->where('is_actived', 0);
+        $query->where('verified', 0);
         return $query;
     }
 
     public function scopePay($query)
     {
-        $query->where('is_payed', 1);
+        $query->where('paid', 1);
         return $query;
     }
 
     public function scopeNotPay($query)
     {
-        $query->where('is_payed', 0);
+        $query->where('paid', 0);
         return $query;
     }
 
-    public function scopeSoftDelete($query)
+    public function scopeDone($query)
     {
-        $query->where('is_deleted', 1);
+        $query->where('done', 1);
         return $query;
     }
 
-    public function scopeNotDelete($query)
+    public function scopeNotDone($query)
     {
-        $query->where('is_deleted', 0);
+        $query->where('done', 0);
         return $query;
     }
 }

@@ -3,387 +3,331 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Helpers\RemoveImage;
+use App\Http\Helpers\UploadImage;
+use App\Http\Requests\GeneralRequest;
+use App\Http\Requests\AdvertiseRequest;
+use App\Models\Advertise;
+use App\Models\Product;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\File;
-use Illuminate\Support\MessageBag;
-use Illuminate\Support\Str;
-use App\Product;
-use App\Advertise;
 
 class AdvertiseController extends Controller
 {
-    public function __construct()
+    // contructor
+    public function __construct(Advertise $advertise, Product $product)
     {
+        $this->advertise = $advertise;
         $this->middleware('auth:admin');
+        $this->product = $product;
     }
+    /**
+     * Display a listing of the resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
     public function index(Request $request)
     {
-        // advertises
-        $advertises = advertise::notDelete()->search($request)->sortId($request)->status($request);
-        $count_advertise = 0;
-        $view = 0;
-        $count_advertise = $advertises->count();
-        if ($request->has('view')) {
-            $view = $request->view;
-        } else {
-            $view = 10;
-        }
-        $advertises = $advertises->paginate($view);
-        // filter
+        // parameter
         $sort_id = $request->sort_id;
+        $search = $request->search;
         $status = $request->status;
         // search
         $search = $request->search;
-        // user
-        $user = Auth::guard('admin')->user();
-
-        return view('admin.advertise.index', [
-            // advertises
+        // view
+        $view = $request->has('view') ? $request->view : 10;
+        // data
+        $advertises = $this->advertise->withoutTrashed();
+        $advertises_count = $advertises->count();
+        $advertises = $advertises->paginate($view);
+        return view('pages.admin.advertise.index', [
             'advertises' => $advertises,
-            'count_advertise' => $count_advertise,
-            'view' => $view,
-            // filter
+            // parameter
             'sort_id' => $sort_id,
-            'status' => $status,
-            //
-            // search
             'search' => $search,
-            'current_user' => $user,
+            'status' => $status,
+            'search' => $search,
+            'view' => $view,
+            'advertises_count' => $advertises_count,
         ]);
     }
 
-    public function doActivate($id)
+    /**
+     * Verify an item.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function verify($id, $verified)
     {
-        $advertise = Advertise::find($id);
-        $advertise->is_actived = 1;
-        $advertise->save();
-        if ($advertise->save()) {
-            return back()->with('success', 'advertise ' . $advertise->name . ' has been activated.');
-        } else {
-            return back()->with('error', 'Error occurred!');
-        }
+        //
+        $verify = $this->advertise->find($id)->update([
+            'verified' => $verified,
+        ]);
+        if ($verified == 0)
+            return back()->with('success', 'Quảng cáo #' . $id . ' đã được tắt .');
+        else
+            return back()->with('success', 'Quảng cáo #' . $id . ' đã được bật.');
     }
 
-    public function doDeactivate($id)
+    /**
+     * Show the form for creating a new resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function create()
     {
-        $advertise = Advertise::find($id);
-        $advertise->is_actived = 0;
-        $advertise->save();
-        if ($advertise->save()) {
-            return back()->with('success', 'advertise ' . $advertise->name . ' has been deactivated.');
-        } else {
-            return back()->with('error', 'Error occurred!');
-        }
-    }
-
-    public function add()
-    {
-        // user
-        $user = Auth::guard('admin')->user();
-
-        $products = Product::where('is_deleted', 0)->get();
-        return view('admin.advertise.add', [
+        //
+        $products = $this->product->all();
+        return view('pages.admin.advertise.create', [
             'products' => $products,
-            //
-            'current_user' => $user,
         ]);
     }
 
-    public function doAdd(Request $request)
+    /**
+     * Store a newly created resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\Response
+     */
+    public function store(AdvertiseRequest $request, UploadImage $uploadImage)
     {
-
-        $validate = Validator::make(
-            $request->all(),
-            [
-                'name' => 'required',
-                'description' => 'required',
-                'summary' => 'required',
-                'image' => 'required',
-                'product_id' => 'required',
-            ],
-            [
-                'required' => ':attribute must be filled',
-            ]
-        );
-        if ($validate->fails()) {
-            return response()->json([
-                'error' => true,
-                'message' => $validate->errors(),
-            ]);
-        } else {
-            $advertise = new Advertise();
-            $advertise->name = $request->name;
-            $advertise->summary = $request->summary;
-            $advertise->description = $request->description;
-            $advertise->product_id = $request->product_id;
-            if ($request->hasFile('image')) {
-                $file = $request->file('image');
-                $format = $file->getClientOriginalExtension();
-                if ($format != 'jpg' && $format != 'png' && $format != 'jpeg') {
-                    $errors = new MessageBag(['errorImage' => 'File is not an image!']);
-                    return response()->json([
-                        'error' => true,
-                        'message' => $errors,
-                    ]);
-                }
-                $name = $file->getClientOriginalName();
-                $avatar = Str::random(4) . "_" . $name;
-                while (file_exists("/uploads/advertises-images/" . $avatar)) {
-                    $avatar = Str::random(4) . "_" . $name;
-                }
-                $file->move(public_path() . '/uploads/advertises-images/', $avatar);
-                $advertise->image = $avatar;
-            } else {
-                $advertise->image = null;
-            }
-            $result = $advertise->save();
-            if ($result) {
-                return response()->json([
-                    'error' => false,
-                    'message' => 'Success'
-                ]);
-            } else {
-                $errors = new MessageBag(['errorAdd' => 'Error occurred!']);
-                return response()->json([
-                    'error' => true,
-                    'message' => $errors
-                ]);
-            }
+        //
+        $avatar = null;
+        if ($request->hasFile('image')) {
+            $avatar = $this->advertise->uploadImage($request->image, $uploadImage);
         }
+        $result = $this->advertise->create([
+            'name' => $request->name,
+            'summary' => $request->summary,
+            'description' => $request->description,
+            'product_id' => $request->product_id,
+            'image' => $avatar,
+        ]);
+        return $result ? back()->with('success', 'Quảng cáo mới được khởi tạo thành công.') : back()->with('error', 'Lỗi xảy ra trong quá trình khởi tạo Quảng cáo mới.');
     }
 
+    /**
+     * Display the specified resource.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function show($id)
+    {
+        //
+    }
+
+    /**
+     * Show the form for editing the specified resource.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
     public function edit($id)
     {
-        // user
-        $user = Auth::guard('admin')->user();
-
-        $advertise =  Advertise::find($id);
-        $products = Product::where('is_deleted', 0)->get();
-        return view('admin.advertise.edit', [
+        //
+        $products = $this->product->all();
+        $advertise = $this->advertise->find($id);
+        return view('pages.admin.advertise.edit', [
             'advertise' => $advertise,
             'products' => $products,
-            //
-            'current_user' => $user,
+
         ]);
     }
 
-    public function doEdit(Request $request)
+    /**
+     * Update the specified resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function update(AdvertiseRequest $request, $id, UploadImage $uploadImage)
     {
-
-        $validate = Validator::make(
-            $request->all(),
-            [
-                'id' => 'required',
-                'name' => 'required',
-                'description' => 'required',
-                'summary' => 'required',
-                'product_id' => 'required',
-            ],
-            [
-                'required' => ':attribute must be filled',
-            ]
-        );
-        if ($validate->fails()) {
-            return response()->json([
-                'error' => true,
-                'message' => $validate->errors(),
-            ]);
+        //
+        $avatar = null;
+        $advertise = $this->advertise->find($id);
+        if ($request->hasFile('image')) {
+            $avatar = $this->advertise->uploadImage($request->image, $uploadImage);
         } else {
-            $advertise = Advertise::find($request->id);
-            $advertise->name = $request->name;
-            $advertise->summary = $request->summary;
-            $advertise->description = $request->description;
-            $advertise->product_id = $request->product_id;
-            if ($request->hasFile('image')) {
-                $file = $request->file('image');
-                $format = $file->getClientOriginalExtension();
-                if ($format != 'jpg' && $format != 'png' && $format != 'jpeg') {
-                    $errors = new MessageBag(['errorImage' => 'File is not an image!']);
-                    return response()->json([
-                        'error' => true,
-                        'message' => $errors,
-                    ]);
-                }
-                $name = $file->getClientOriginalName();
-                $avatar = Str::random(4) . "_" . $name;
-                while (file_exists("/uploads/advertises-images/" . $avatar)) {
-                    $avatar = Str::random(4) . "_" . $name;
-                }
-                $file->move(public_path() . '/uploads/advertises-images/', $avatar);
-                $advertise->image = $avatar;
-            }
-            $result = $advertise->save();
-            if ($result) {
-                return response()->json([
-                    'error' => false,
-                    'message' => 'Success'
-                ]);
-            } else {
-                $errors = new MessageBag(['errorEdit' => 'Error occurred!']);
-                return response()->json([
-                    'error' => true,
-                    'message' => $errors
-                ]);
-            }
+            $avatar = $advertise->image;
         }
+        $result = $advertise->update([
+            'name' => $request->name,
+            'summary' => $request->summary,
+            'description' => $request->description,
+            'product_id' => $request->product_id,
+            'image' => $avatar,
+        ]);
+        return $result ? back()->with('success', 'Quảng cáo #' . $advertise->id . ' đã được cập nhật.') : back()->with('error', 'Lỗi xảy ra khi cập nhật Quảng cáo #' . $id);
     }
 
-    public function doRemove($id)
+    /**
+     * Softdelete the specified resource from storage.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function delete($id)
     {
-        $advertise = Advertise::find($id);
-        $advertise->is_deleted = 1;
-        if ($advertise->save()) {
-            return back()->with('success', 'Advertise #' . $advertise->id . ' has been removed.');
-        } else {
-            return back()->with('error', 'Error occurred!');
-        }
+        $advertise = $this->advertise->find($id);
+        $result = $advertise->delete();
+        return $result ? back()->withSuccess('Quảng cáo #' . $id . ' đã bị loại bỏ.') : back()->withError('Xảy ra lỗi khi loại bỏ Quảng cáo #' . $id);
     }
 
+
+    /**
+     * Display a listing of the softdeleted resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
     public function recycle(Request $request)
     {
-        // advertises
-        $advertises = advertise::softDelete()->search($request)->sortId($request)->status($request);
-        $count_advertise = 0;
-        $view = 0;
-        $count_advertise = $advertises->count();
-        if ($request->has('view')) {
-            $view = $request->view;
-        } else {
-            $view = 10;
-        }
-        $advertises = $advertises->paginate($view);
-        // filter
+        // parameter
         $sort_id = $request->sort_id;
+        $search = $request->search;
         $status = $request->status;
         // search
         $search = $request->search;
-        // user
-        $user = Auth::guard('admin')->user();
-
-        return view('admin.advertise.recycle', [
-            // advertises
+        // view
+        $view = $request->has('view') ? $request->view : 10;
+        // data
+        $advertises = $this->advertise->onlyTrashed();
+        $advertises_count = $advertises->count();
+        $advertises = $advertises->paginate($view);
+        return view('pages.admin.advertise.recycle', [
             'advertises' => $advertises,
-            'count_advertise' => $count_advertise,
-            'view' => $view,
-            // filter
+            // parameter
             'sort_id' => $sort_id,
-            'status' => $status,
-            //
-            // search
             'search' => $search,
-            'current_user' => $user,
+            'status' => $status,
+            'search' => $search,
+            'view' => $view,
+            'advertises_count' => $advertises_count,
         ]);
     }
 
-    public function doRestore($id)
+    /**
+     * Restore the specified resource from storage.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function restore($id)
     {
-        $advertise = Advertise::find($id);
-        $advertise->is_deleted = 0;
-        if ($advertise->save()) {
-            return back()->with('success', 'Advertise #' . $advertise->id . ' has been restored.');
-        } else {
-            return back()->with('error', 'Error occurred!');
-        }
+        $result = $this->advertise->onlyTrashed()->find($id)->restore();
+        return $result ? back()->withSuccess('Quảng cáo #' . $id . ' đã được phục hồi.') : back()->withError('Lỗi xảy ra trong quá trình khôi phục Quảng cáo #' . $id);
     }
 
-    public function doDelete($id)
+    /**
+     * Remove the specified resource from storage.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function destroy($id, RemoveImage $removeImage)
     {
-        $advertise = Advertise::find($id);
-        if ($advertise->forceDelete()) {
-            return back()->with('success', 'Advertise #' . $advertise->id . ' has been deleted.');
-        } else {
-            return back()->with('error', 'Error occurred!');
-        }
+        //
+        $advertise = $this->advertise->onlyTrashed()->find($id);
+        $this->advertise->removeImage($advertise->image, $removeImage);
+        $result = $advertise->forceDelete();
+        return $result ? back()->with('success', 'Quảng cáo #' . $id . ' đã được xóa vĩnh viễn.') : back()->withError('Lỗi xảy trong quá trình xóa vĩnh viễn Quảng cáo #' . $id);
     }
-    public function bulk_action(Request $request)
+
+    public function bulk_action(Request $request, RemoveImage $removeImage)
     {
         if ($request->has('bulk_action')) {
             if ($request->has('advertise_id_list')) {
                 $message = null;
+                $errors = null;
                 switch ($request->bulk_action) {
                     case 0: // deactivate
-                        $message = 'advertise ';
+                        $message = 'Quảng cáo ';
                         foreach ($request->advertise_id_list as $advertise_id) {
-                            $advertise = null;
-                            $advertise = advertise::find($advertise_id);
-                            $advertise->is_actived = 0;
-                            if ($advertise->save()) {
+                            $advertise = $this->advertise->find($advertise_id);
+                            $verify = $advertise->update([
+                                'verified' => 0,
+                            ]);
+                            if ($verify) {
                                 $message .= ' #' . $advertise->id . ', ';
                             } else {
-                                return back()->with('error', 'Error occurred while deactivating advertise #' . $advertise->id);
+                                $errors[] = 'Lỗi xảy ra khi tắt Quảng cáo #' . $advertise->id . '.';
                             }
                         }
-                        $message .= 'have been deactivated.';
-                        return back()->with('success', $message);
+                        $message .= 'đã được tắt.';
                         break;
                     case 1: // activate
-                        $message = 'advertise ';
+                        $message = 'Quảng cáo ';
                         foreach ($request->advertise_id_list as $advertise_id) {
-                            $advertise = null;
-                            $advertise = advertise::find($advertise_id);
-                            $advertise->is_actived = 1;
-                            if ($advertise->save()) {
+                            $advertise = $this->advertise->find($advertise_id);
+                            $verify = $advertise->update([
+                                'verified' => 1,
+                            ]);
+                            if ($verify) {
                                 $message .= ' #' . $advertise->id . ', ';
                             } else {
-                                return back()->with('error', 'Error occurred while activating advertise #' . $advertise->id);
+                                $errors[] = 'Lỗi xảy ra khi bật Quảng cáo #' . $advertise->id . '.';
                             }
                         }
-                        $message .= 'have been activated.';
-                        return back()->with('success', $message);
+                        $message .= 'đã được bật.';
                         break;
                     case 2: // remove
-                        $message = 'advertise';
+                        $message = 'Quảng cáo';
                         foreach ($request->advertise_id_list as $advertise_id) {
                             $advertise = null;
-                            $advertise = advertise::find($advertise_id);
-                            $advertise->is_deleted = 1;
-                            if ($advertise->save()) {
+                            $advertise = $this->advertise->find($advertise_id);
+                            $result = $advertise->delete();
+                            if ($result) {
                                 $message .= ' #' . $advertise->id . ', ';
-                            } else {
-                                return back()->with('error', 'Error occurred while removing advertise #' . $advertise->id);
+                            }
+                            else {
+                                $errors[] = 'Lỗi xảy ra khi loại bỏ Quảng cáo #' . $advertise->id . '.';
                             }
                         }
-                        $message .= 'have been removed.';
+                        $message .= 'đã được loại bỏ.';
                         break;
                     case 3: // restore
-                        $message = 'advertise ';
+                        $message = 'Quảng cáo';
                         foreach ($request->advertise_id_list as $advertise_id) {
                             $advertise = null;
-                            $advertise = advertise::find($advertise_id);
-                            $advertise->is_deleted = 0;
-                            if ($advertise->save()) {
+                            $advertise = $this->advertise->onlyTrashed()->find($advertise_id);
+                            $result = $advertise->restore();
+                            if ($result) {
                                 $message .= ' #' . $advertise->id . ', ';
-                            } else {
-                                return back()->with('error', 'Error occurred while restoring advertise #' . $advertise->id);
+                            }
+                            else {
+                                $errors[] = 'Lỗi xảy ra khi khôi phục Quảng cáo #' . $advertise->id . '.';
                             }
                         }
-                        $message .= 'have been restored.';
-                        return back()->with('success', $message);
+                        $message .= 'đã được khôi phục.';
                         break;
                     case 4: // delete
-                        $message = 'advertise ';
+                        $message = 'Quảng cáo';
                         foreach ($request->advertise_id_list as $advertise_id) {
                             $advertise = null;
-                            $advertise = advertise::find($advertise_id);
-                            if ($advertise->forceDelete()) {
+                            $advertise = $this->advertise->onlyTrashed()->find($advertise_id);
+                            $this->advertise->removeImage($advertise->image, $removeImage);
+                            $result = $advertise->forceDelete();
+                            if ($result) {
                                 $message .= ' #' . $advertise->id . ', ';
-                            } else {
-                                return back()->with('error', 'Error occurred while deleting advertise #' . $advertise->id);
+                            }
+                            else {
+                                $errors[] = 'Lỗi xảy ra khi xóa vĩnh viễn Quảng cáo #' . $advertise->id . '.';
                             }
                         }
-                        $message .= 'have been deleted.';
-                        return back()->with('success', $message);
+                        $message .= 'đã được xóa vĩnh viễn.';
                         break;
                 }
-                return back()->with('success', $message);
+                if ($errors != null) {
+                    return back()->withSuccess($message)->withErrors($errors);
+                }
+                else {
+                    return back()->withSuccess($message);
+                }
             } else {
-                return back()->with('error', 'Please select advertises to take action!');
+                return back()->withError('Hãy chọn ít nhất 1 Quảng cáo để thực hiện thao tác!');
             }
         } else {
-            return back()->with('error', 'Please select an action!');
+            return back()->withError('Hãy chọn 1 thao tác cụ thể!');
         }
     }
 }

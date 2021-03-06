@@ -3,268 +3,295 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Helpers\RemoveImage;
+use App\Http\Helpers\UploadImage;
+use App\Models\Contact;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\File;
-use Illuminate\Support\MessageBag;
-use Illuminate\Support\Str;
-use App\Product;
-use App\Contact;
 
 class ContactController extends Controller
 {
-    public function __construct()
+    // contructor
+    public function __construct(Contact $contact)
     {
         $this->middleware('auth:admin');
+        $this->contact = $contact;
     }
+    /**
+     * Display a listing of the resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
     public function index(Request $request)
     {
-        // contacts
-        $contacts = contact::notDelete()->sortId($request)->status($request)->orderByDesc('create_date');
-        $count_contact = 0;
-        $view = 0;
-        $count_contact = $contacts->count();
-        if ($request->has('view')) {
-            $view = $request->view;
-        } else {
-            $view = 10;
-        }
-        $contacts = $contacts->paginate($view);
-        // filter
+        // parameter
         $sort_id = $request->sort_id;
         $status = $request->status;
         // search
         $search = $request->search;
-        // user
-        $user = Auth::guard('admin')->user();
-        return view('admin.contact.index', [
-            // contacts
+        // view
+        $view = $request->has('view') ? $request->view : 10;
+        // data
+        $contacts = $this->contact->sortId($request)->status($request)->latest();
+        $contacts_count = $contacts->count();
+        $contacts = $contacts->paginate($view);
+        return view('pages.admin.contact.index', [
             'contacts' => $contacts,
-            'count_contact' => $count_contact,
-            'view' => $view,
-            // filter
+            // parameter
             'sort_id' => $sort_id,
             'status' => $status,
-            //
-            // search
             'search' => $search,
-            'current_user' => $user,
+            'view' => $view,
+            'contacts_count' => $contacts_count,
         ]);
     }
 
-    public function doRead($id)
+    /**
+     * Verify an item.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function verify($id, $verified)
     {
-        $contact = contact::find($id);
-        $contact->is_read = 1;
-        if ($contact->save()) {
-            return back()->with('success', 'Contact #' . $contact->id . ' has been read.');
-        } else {
-            return back()->with('error', 'Error occurred!');
-        }
+        //
+        $verify = $this->contact->find($id)->update([
+            'verified' => $verified,
+        ]);
+        if ($verified == 0)
+            return back()->with('success', 'Liên lạc #' . $id . ' chưa được đọc .');
+        else
+            return back()->with('success', 'Liên lạc #' . $id . ' đã được đọc.');
     }
 
-    public function doUnread($id)
+    /**
+     * Show the form for creating a new resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function create()
     {
-        $contact = contact::find($id);
-        $contact->is_read = 0;
-        if ($contact->save()) {
-            return back()->with('success', 'Contact #' . $contact->id . ' has been read.');
-        } else {
-            return back()->with('error', 'Error occurred!');
-        }
+        //
     }
 
-
-    public function detail($id)
+    /**
+     * Store a newly created resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\Response
+     */
+    public function store()
     {
-        // user
-        $user = Auth::guard('admin')->user();
-        $contact =  Contact::find($id);
-        return view('admin.contact.detail', [
+        //
+    }
+
+    /**
+     * Display the specified resource.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function show($id)
+    {
+        //
+        $contact = $this->contact->find($id);
+        $contact->update(['verified'=>1]);
+        return view('pages.admin.contact.detail', [
             'contact' => $contact,
-            //
-            'current_user' => $user,
         ]);
     }
 
-    public function doRemove($id)
+    /**
+     * Show the form for editing the specified resource.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function edit($id)
     {
-        $contact = Contact::find($id);
-        if ($contact->is_read == 0) {
-            return back()->with('error','Contact #'.$contact->id.' hasn\'t been read yet.');
-        }
-        else {
-            $contact->is_deleted = 1;
-            if ($contact->save()) {
-                return back()->with('success', 'Contact #' . $contact->id . ' has been removed.');
-            } else {
-                return back()->with('error', 'Error occurred!');
-            }
-        }
+        //
+
     }
 
+    /**
+     * Update the specified resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function update(Request $request, $id, UploadImage $uploadImage)
+    {
+        //
+        $contact = $this->contact->find($id);
+        $result = $contact->update([
+            'name' => $request->name,
+            'verified' => $request->verfied,
+        ]);
+        return $result ? back()->with('success', 'Liên lạc #' . $contact->id . ' đã được cập nhật.') : back()->with('error', 'Lỗi xảy ra khi cập nhật Liên lạc #' . $id);
+    }
+
+    /**
+     * Softdelete the specified resource from storage.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function delete($id)
+    {
+        $contact = $this->contact->find($id);
+        $result = $contact->delete();
+        return $result ? back()->withSuccess('Liên lạc #' . $id . ' đã bị loại bỏ.') : back()->withError('Xảy ra lỗi khi loại bỏ Liên lạc #' . $id);
+    }
+
+
+    /**
+     * Display a listing of the softdeleted resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
     public function recycle(Request $request)
     {
-        // contacts
-        $contacts = contact::softDelete()->sortId($request)->status($request);
-        $count_contact = 0;
-        $view = 0;
-        $count_contact = $contacts->count();
-        if ($request->has('view')) {
-            $view = $request->view;
-        } else {
-            $view = 10;
-        }
-        $contacts = $contacts->paginate($view);
-        // filter
+        // parameter
         $sort_id = $request->sort_id;
         $status = $request->status;
         // search
         $search = $request->search;
-        // user
-        $user = Auth::guard('admin')->user();
-        return view('admin.contact.recycle', [
-            // contacts
+        // view
+        $view = $request->has('view') ? $request->view : 10;
+        // data
+        $contacts = $this->contact->onlyTrashed()->sortId($request)->status($request)->latest();
+        $contacts_count = $contacts->count();
+        $contacts = $contacts->paginate($view);
+        return view('pages.admin.contact.recycle', [
             'contacts' => $contacts,
-            'count_contact' => $count_contact,
-            'view' => $view,
-            // filter
+            // parameter
             'sort_id' => $sort_id,
             'status' => $status,
-            //
-            // search
             'search' => $search,
-            'current_user' => $user,
+            'view' => $view,
+            'contacts_count' => $contacts_count,
         ]);
     }
 
-    public function doRestore($id)
+    /**
+     * Restore the specified resource from storage.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function restore($id)
     {
-        $contact = contact::find($id);
-        $contact->is_deleted = 0;
-        if ($contact->save()) {
-            return back()->with('success', 'Contact #' . $contact->id . ' has been restored.');
-        } else {
-            return back()->with('error', 'Error occurred!');
-        }
+        $result = $this->contact->onlyTrashed()->find($id)->restore();
+        return $result ? back()->withSuccess('Liên lạc #' . $id . ' đã được phục hồi.') : back()->withError('Lỗi xảy ra trong quá trình khôi phục Liên lạc #' . $id);
     }
 
-    public function doDelete($id)
+    /**
+     * Remove the specified resource from storage.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function destroy($id)
     {
-        $contact = Contact::find($id);
-        if ($contact->is_read == 0) {
-            return back()->with('error','Contact #'.$contact->id.' hasn\'t been read yet.');
-        }
-        else {
-            $contact->is_deleted = 1;
-            if ($contact->forceDelete()) {
-                return back()->with('success', 'Contact #' . $contact->id . ' has been deleted.');
-            } else {
-                return back()->with('error', 'Error occurred!');
-            }
-        }
+        //
+        $contact = $this->contact->onlyTrashed()->find($id);
+        $result = $contact->forceDelete();
+        return $result ? back()->with('success', 'Liên lạc #' . $id . ' đã được xóa vĩnh viễn.') : back()->withError('Lỗi xảy trong quá trình xóa vĩnh viễn Liên lạc #' . $id);
     }
+
     public function bulk_action(Request $request)
     {
         if ($request->has('bulk_action')) {
             if ($request->has('contact_id_list')) {
                 $message = null;
-                $error = null;
+                $errors = null;
                 switch ($request->bulk_action) {
-                    case 0: // read
-                        $message = 'Contact ';
+                    case 0: // deactivate
+                        $message = 'Liên lạc ';
                         foreach ($request->contact_id_list as $contact_id) {
-                            $contact = null;
-                            $contact = contact::find($contact_id);
-                            $contact->is_read = 1;
-                            if ($contact->save()) {
+                            $contact = $this->contact->find($contact_id);
+                            $verify = $contact->update([
+                                'verified' => 0,
+                            ]);
+                            if ($verify) {
                                 $message .= ' #' . $contact->id . ', ';
                             } else {
-                                return back()->with('error', 'Error occurred while marking contact #' . $contact->id.' as read message.');
+                                $errors[] = 'Lỗi xảy ra khi được đánh dấu là chưa đọc Liên lạc #' . $contact->id . '.';
                             }
                         }
-                        $message .= 'have been marked as read message(s).';
-                        return back()->with('success', $message);
+                        $message .= 'đã được tắt.';
                         break;
-                    case 1: // unread
-                        $message = 'Contact ';
+                    case 1: // activate
+                        $message = 'Liên lạc ';
                         foreach ($request->contact_id_list as $contact_id) {
-                            $contact = null;
-                            $contact = contact::find($contact_id);
-                            $contact->is_read = 0;
-                            if ($contact->save()) {
+                            $contact = $this->contact->find($contact_id);
+                            $verify = $contact->update([
+                                'verified' => 1,
+                            ]);
+                            if ($verify) {
                                 $message .= ' #' . $contact->id . ', ';
                             } else {
-                                return back()->with('error', 'Error occurred while marking contact #' . $contact->id.' as unread message.');
+                                $errors[] = 'Lỗi xảy ra khi được đánh dấu là đã đọc Liên lạc #' . $contact->id . '.';
                             }
                         }
-                        $message .= 'have been marked as unread message(s).';
-                        return back()->with('success', $message);
+                        $message .= 'đã được bật.';
                         break;
                     case 2: // remove
-                        $message = 'Contact';
+                        $message = 'Liên lạc';
                         foreach ($request->contact_id_list as $contact_id) {
                             $contact = null;
-                            $contact = contact::find($contact_id);
-                            if ($contact->is_read == 1) {
-                                $contact->is_deleted = 1;
-                                if ($contact->save()) {
-                                    $message .= ' #' . $contact->id . ', ';
-                                } else {
-                                    return back()->with('error', 'Error occurred while removing contact #' . $contact->id);
-                                }
+                            $contact = $this->contact->find($contact_id);
+                            $result = $contact->delete();
+                            if ($result) {
+                                $message .= ' #' . $contact->id . ', ';
                             }
                             else {
-                                $error .= 'Contact #'.$contact->id.' hasn\'t been read yet.';
+                                $errors[] = 'Lỗi xảy ra khi loại bỏ Liên lạc #' . $contact->id . '.';
                             }
                         }
-                        $message .= 'have been removed.';
+                        $message .= 'đã được loại bỏ.';
                         break;
                     case 3: // restore
-                        $message = 'contact ';
+                        $message = 'Liên lạc';
                         foreach ($request->contact_id_list as $contact_id) {
                             $contact = null;
-                            $contact = contact::find($contact_id);
-                            $contact->is_deleted = 0;
-                            if ($contact->save()) {
+                            $contact = $this->contact->onlyTrashed()->find($contact_id);
+                            $result = $contact->restore();
+                            if ($result) {
                                 $message .= ' #' . $contact->id . ', ';
-                            } else {
-                                return back()->with('error', 'Error occurred while restoring contact #' . $contact->id);
-                            }
-                        }
-                        $message .= 'have been restored.';
-                        return back()->with('success', $message);
-                        break;
-                    case 4: // delete
-                        $message = 'Contact';
-                        foreach ($request->contact_id_list as $contact_id) {
-                            $contact = null;
-                            $contact = contact::find($contact_id);
-                            if ($contact->is_read == 1) {
-                                if ($contact->forceDelete()) {
-                                    $message .= ' #' . $contact->id . ', ';
-                                } else {
-                                    return back()->with('error', 'Error occurred while deleting contact #' . $contact->id);
-                                }
                             }
                             else {
-                                $error .= 'Contact #'.$contact->id.' hasn\'t been read yet.';
+                                $errors[] = 'Lỗi xảy ra khi khôi phục Liên lạc #' . $contact->id . '.';
                             }
                         }
-                        $message .= 'have been deleted.';
+                        $message .= 'đã được khôi phục.';
+                        break;
+                    case 4: // delete
+                        $message = 'Liên lạc';
+                        foreach ($request->contact_id_list as $contact_id) {
+                            $contact = null;
+                            $contact = $this->contact->onlyTrashed()->find($contact_id);
+                            $result = $contact->forceDelete();
+                            if ($result) {
+                                $message .= ' #' . $contact->id . ', ';
+                            }
+                            else {
+                                $errors[] = 'Lỗi xảy ra khi xóa vĩnh viễn Liên lạc #' . $contact->id . '.';
+                            }
+                        }
+                        $message .= 'đã được xóa vĩnh viễn.';
                         break;
                 }
-                if ($error != null) {
-                    return back()->with('success', $message)->with('error', $error);
+                if ($errors != null) {
+                    return back()->withSuccess($message)->withErrors($errors);
                 }
-                return back()->with('success', $message);
+                else {
+                    return back()->withSuccess($message);
+                }
             } else {
-                return back()->with('error', 'Please select contacts to take action!');
+                return back()->withError('Hãy chọn ít nhất 1 Liên lạc để thực hiện thao tác!');
             }
         } else {
-            return back()->with('error', 'Please select an action!');
+            return back()->withError('Hãy chọn 1 thao tác cụ thể!');
         }
     }
 }
