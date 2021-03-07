@@ -12,7 +12,10 @@ use App\Http\Controllers\Admin\TagController;
 use App\Http\Controllers\Admin\TagProductController;
 use App\Http\Controllers\Admin\ContactController;
 use App\Http\Controllers\Admin\ReviewController;
-use App\Http\Controllers\Admin\OrderController as AdminOrderController;
+use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
+use App\Http\Controllers\Admin\ProfileController;
+use App\Http\Controllers\Admin\PasswordController as AdminPasswordController;
+use App\Http\Controllers\Admin\OrderController as AdminOrderController;;
 
 // Customer
 use App\Http\Controllers\Customer\CartController;
@@ -81,11 +84,13 @@ Route::prefix('authentication')->as('auth.')->group(function() {
     Route::prefix('admin')->as('admin.')->group(function() {
         Route::get('login', [LoginController::class, 'showAdminLogin'])->name('index');
         Route::post('login', [LoginController::class, 'adminLogin'])->name('login');
+        Route::get('logout',[LogoutController::class,'adminLogout'])->name('logout');
     });
 
     Route::prefix('customer')->as('customer.')->group(function() {
         Route::get('login', [LoginController::class, 'index'])->name('index');
         Route::post('login', [LoginController::class, 'customerLogin'])->name('login'); 
+        Route::get('logout', [LogoutController::class, 'customerLogout'])->name('logout'); 
         Route::post('register', [RegisterController::class, 'register'])->name('register'); 
     });
 });
@@ -194,10 +199,27 @@ Route::group(['prefix' => 'check-out', 'as' => 'checkout.'], function () {
 Route::get('delivery/{id}', [DeliveryController::class, 'index'])->name('delivery');
 // end
 
-Route::prefix('administrator')->as('admin.')->namespace('Admin')->group(function () {
-    Route::get('/', function () {
-        return view('admin.Customer.dashboard.index');
-    })->name('index');
+Route::prefix('administrator')->as('admin.')->group(function () {
+    Route::get('/',[AdminDashboardController::class,'index'])->name('index');
+
+    Route::group(['prefix' => 'profile', 'as' => 'profile.'], function () {
+        Route::get('/', [ProfileController::class,'index'])->name('index');
+        Route::post('/', [ProfileController::class,'update'])->name('update');
+        Route::get('/password',[AdminPasswordController::class,'index'])->name('password.index');
+        Route::post('/password',[AdminPasswordController::class,'changePassword'])->name('password.update');
+    });
+
+    Route::group(['prefix' => 'panel','as'=>'admin.'], function () {
+        Route::get('/', 'AdminController@index')->name('index');
+        Route::get('/activate/{id}', 'AdminController@doActivate')->name('activate');
+        Route::get('/deactivate/{id}', 'AdminController@doDeactivate')->name('deactivate');
+        Route::get('/bulk-action', 'AdminController@bulk_action')->name('bulk_action');
+        Route::get('/remove/{id}', 'AdminController@doRemove')->name('remove');
+        Route::get('/restore/{id}', 'AdminController@doRestore')->name('restore');
+        Route::get('/delete/{id}', 'AdminController@doDelete')->name('delete');
+        Route::get('/recycle', 'AdminController@recycle')->name('recycle');
+
+    });
 
     Route::prefix('products')->as('product.')->group(function () {
         Route::get('/', [ProductController::class, 'index'])->name('index');
@@ -308,21 +330,21 @@ Route::prefix('administrator')->as('admin.')->namespace('Admin')->group(function
 
     // Order
     Route::prefix('order')->as('order.')->group(function () {
-        Route::get('/', [OrderController::class, 'index'])->name('index');
-        Route::get('/bulk-action', [OrderController::class, 'bulk_action'])->name('bulk_action');
-        Route::get('/{id}/verify/{verified}', [ContactController::class, 'verify'])->name('verify');
-        Route::get('/{id}/confirm/{confirmed}', [ContactController::class, 'confirm'])->name('confirm');
-        Route::get('/{id}/pay/{paid}', [ContactController::class, 'pay'])->name('pay');
-        Route::get('/create', [OrderController::class, 'create'])->name('create');
-        Route::post('/store', [OrderController::class, 'store'])->name('store');
-        Route::get('/history', [OrderController::class, 'history'])->name('history');
-        Route::get('/cancel', [OrderController::class, 'cancel'])->name('cancel');
-        Route::get('/{id}/edit', [OrderController::class, 'edit'])->name('edit');
-        Route::post('/update', [OrderController::class, 'update'])->name('update');
-        Route::get('/{id}/delete', [OrderController::class, 'delete'])->name('delete');
-        Route::get('/recycle', [OrderController::class, 'recycle'])->name('recycle');
-        Route::get('/{id}/restore', [ContactController::class, 'restore'])->name('restore');
-        Route::get('/{id}/destroy', [ContactController::class, 'destroy'])->name('destroy');
+        Route::get('/', [AdminOrderController::class, 'index'])->name('index');
+        Route::get('/bulk-action', [AdminOrderController::class, 'bulk_action'])->name('bulk_action');
+        Route::get('/{id}/verify/{verified}', [AdminOrderController::class, 'verify'])->name('verify');
+        Route::get('/{id}/confirm/{confirmed}', [AdminOrderController::class, 'confirm'])->name('confirm');
+        Route::get('/{id}/pay/{paid}', [AdminOrderController::class, 'pay'])->name('pay');
+        Route::get('/create', [AdminOrderController::class, 'create'])->name('create');
+        Route::post('/store', [AdminOrderController::class, 'store'])->name('store');
+        Route::get('/history', [AdminOrderController::class, 'history'])->name('history');
+        Route::get('/cancel', [AdminOrderController::class, 'cancel'])->name('cancel');
+        Route::get('/{id}/edit', [AdminOrderController::class, 'edit'])->name('edit');
+        Route::post('/{id}/update', [AdminOrderController::class, 'update'])->name('update');
+        Route::get('/{id}/delete', [AdminOrderController::class, 'delete'])->name('delete');
+        Route::get('/recycle', [AdminOrderController::class, 'recycle'])->name('recycle');
+        Route::get('/{id}/restore', [AdminOrderController::class, 'restore'])->name('restore');
+        Route::get('/{id}/destroy', [AdminOrderController::class, 'destroy'])->name('destroy');
     });
 
     // users
@@ -337,6 +359,7 @@ Route::prefix('administrator')->as('admin.')->namespace('Admin')->group(function
         Route::get('/delete/{id}', 'UserController@doDelete')->name('delete');
         Route::get('/recycle', 'UserController@recycle')->name('recycle');
     });
+
     Route::prefix('users')->as('user.')->group(function () {
         Route::get('/', [UserController::class, 'index'])->name('index');
         Route::get('/{id}/verify/{verified}', [UserController::class, 'verify'])->name('verify');
@@ -348,8 +371,6 @@ Route::prefix('administrator')->as('admin.')->namespace('Admin')->group(function
         Route::get('/{id}/restore', [UserController::class, 'restore'])->name('restore');
         Route::get('/{id}/destroy', [UserController::class, 'destroy'])->name('destroy');
     });
-
-
 
     Route::prefix('collections')->as('collection.')->group(function () {
         Route::get('/', [CollectionController::class, 'index'])->name('index');
@@ -407,252 +428,3 @@ Route::prefix('administrator')->as('admin.')->namespace('Admin')->group(function
         });
     });
 });
-
-// Route::group(['prefix' => 'administrator', 'namespace' => 'Admin', 'as' => 'admin.'], function () {
-//     Route::group(['prefix' => 'auth', 'as' => 'auth.'], function () {
-//         Route::get('/login', 'auth\LoginController@index')->name('login');
-//         Route::post('/login', 'auth\LoginController@doLogin')->name('doLogin');
-//         Route::get('/logout', 'auth\LogoutController@index')->name('doLogout');
-
-//         Route::get('/profile', 'auth\ProfileController@index')->name('profile');
-//         Route::post('/profile', 'auth\ProfileController@doEdit')->name('doEdit');
-//         Route::get('/password','auth\PasswordController@index')->name('password');
-//         Route::post('/password','auth\PasswordController@change_password')->name('doChangePassword');
-
-//     });
-
-//     Route::get('/', 'DashboardController@index')->name('index');
-
-//     Route::group(['prefix' => 'panel','as'=>'admin.'], function () {
-//         Route::get('/', 'AdminController@index')->name('index');
-//         Route::get('/activate/{id}', 'AdminController@doActivate')->name('activate');
-//         Route::get('/deactivate/{id}', 'AdminController@doDeactivate')->name('deactivate');
-//         Route::get('/bulk-action', 'AdminController@bulk_action')->name('bulk_action');
-//         Route::get('/remove/{id}', 'AdminController@doRemove')->name('remove');
-//         Route::get('/restore/{id}', 'AdminController@doRestore')->name('restore');
-//         Route::get('/delete/{id}', 'AdminController@doDelete')->name('delete');
-//         Route::get('/recycle', 'AdminController@recycle')->name('recycle');
-
-//     });
-
-//     // products
-//     Route::group(['prefix' => 'product', 'as' => 'product.'], function () {
-//         Route::get('/', 'ProductController@index')->name('index'); //
-//         Route::get('/activate/{id}', 'ProductController@doActivate');
-//         Route::get('/deactivate/{id}', 'ProductController@doDeactivate');
-//         Route::get('/bulk-action', 'ProductController@bulk_action')->name('bulk_action');
-//         Route::get('/add', 'ProductController@add')->name('add');
-//         Route::post('/add', 'ProductController@doAdd');
-//         Route::get('/edit/{id}', 'ProductController@edit');
-//         Route::post('/edit', 'ProductController@doEdit');
-//         Route::get('/remove/{id}', 'ProductController@doRemove');
-//         Route::get('/restore/{id}', 'ProductController@doRestore');
-//         Route::get('/delete/{id}', 'ProductController@doDelete');
-//         Route::get('/import', 'ProductController@import');
-//         Route::post('/import', 'ProductController@doImport')->name('import');
-//         Route::get('/recycle', 'ProductController@recycle')->name('recycle');
-//         Route::group(['prefix' => '{id}/gallery', 'as' => 'image.'], function () {
-//             Route::get('/', 'ProductImageController@index')->name('index');
-//             Route::get('/bulk-action', 'ProductImageController@bulk_action')->name('bulk_action');
-//             Route::get('/activate/{image_id}', 'ProductImageController@doActivate')->name('activate');
-//             Route::get('/deactivate/{image_id}', 'ProductImageController@doDeactivate')->name('deactivate');
-//             Route::get('/remove/{image_id}', 'ProductImageController@doRemove')->name('remove');
-//             Route::get('/add', 'ProductImageController@add')->name('add');
-//             Route::post('/add', 'ProductImageController@doAdd')->name('doAdd');
-//             Route::get('/edit/{image_id}', 'ProductImageController@edit')->name('edit');
-//             Route::post('/edit', 'ProductImageController@doEdit')->name('doEdit');
-//             Route::get('/recycle', 'ProductImageController@recycle')->name('recycle');
-//             Route::get('/restore/{image_id}', 'ProductImageController@doRestore')->name('restore');
-//             Route::get('/delete/{image_id}', 'ProductImageController@doDelete')->name('delete');
-//         });
-//     });
-
-//     // category
-//     Route::group(['prefix' => 'category', 'as' => 'category.'], function () {
-//         Route::get('/', 'CategoryController@index')->name('index');
-//         Route::get('/activate/{id}', 'CategoryController@doActivate')->name('activate');
-//         Route::get('/deactivate/{id}', 'CategoryController@doDeactivate')->name('deactivate');
-//         Route::get('/bulk-action', 'CategoryController@bulk_action')->name('bulk_action');
-//         Route::get('/add', 'CategoryController@add')->name('add');
-//         Route::post('/add', 'CategoryController@doAdd')->name('doAdd');
-//         Route::get('/edit/{id}', 'CategoryController@edit')->name('edit');
-//         Route::post('/edit', 'CategoryController@doEdit')->name('doEdit');
-//         Route::get('/remove/{id}', 'CategoryController@doRemove')->name('remove');
-//         Route::get('/recycle', 'CategoryController@recycle')->name('recycle');
-//         Route::get('/restore/{id}', 'CategoryController@doRestore')->name('restore');
-//         Route::get('/delete/{id}', 'CategoryController@doDelete')->name('delete');
-//     });
-
-//     // producer
-//     Route::group(['prefix' => 'producer', 'as' => 'producer.'], function () {
-//         Route::get('/', 'ProducerController@index')->name('index');
-//         Route::get('/activate/{id}', 'ProducerController@doActivate')->name('activate');
-//         Route::get('/deactivate/{id}', 'ProducerController@doDeactivate')->name('deactivate');
-//         Route::get('/bulk-action', 'ProducerController@bulk_action')->name('bulk_action');
-//         Route::get('/add', 'ProducerController@add')->name('add');
-//         Route::post('/add', 'ProducerController@doAdd')->name('doAdd');
-//         Route::get('/edit/{id}', 'ProducerController@edit')->name('edit');
-//         Route::post('/edit', 'ProducerController@doEdit')->name('doEdit');
-//         Route::get('/remove/{id}', 'ProducerController@doRemove')->name('remove');
-//         Route::get('/recycle', 'ProducerController@recycle')->name('recycle');
-//         Route::get('/restore/{id}', 'ProducerController@doRestore')->name('restore');
-//         Route::get('/delete/{id}', 'ProducerController@doDelete')->name('delete');
-//     });
-
-//     // coupon
-//     Route::group(['prefix' => 'coupon', 'as' => 'coupon.'], function () {
-//         Route::get('/', 'CouponController@index')->name('index');
-//         Route::get('/activate/{id}', 'CouponController@doActivate')->name('activate');
-//         Route::get('/deactivate/{id}', 'CouponController@doDeactivate')->name('deactivate');
-//         Route::get('/bulk-action', 'CouponController@bulk_action')->name('bulk_action');
-//         Route::get('/add', 'CouponController@add')->name('add');
-//         Route::post('/add', 'CouponController@doAdd')->name('doAdd');
-//         Route::get('/edit/{id}', 'CouponController@edit')->name('edit');
-//         Route::post('/edit', 'CouponController@doEdit')->name('doEdit');
-//         Route::get('/remove/{id}', 'CouponController@doRemove')->name('remove');
-//         Route::get('/restore/{id}', 'CouponController@doRestore')->name('restore');
-//         Route::get('/delete/{id}', 'CouponController@doDelete')->name('delete');
-//         Route::get('/recycle', 'CouponController@recycle')->name('recycle');
-//     });
-
-//     // collection
-//     Route::group(['prefix' => 'collection', 'as' => 'collection.'], function () {
-//         Route::get('/', 'CollectionController@index')->name('index');
-//         Route::get('/activate/{id}', 'CollectionController@doActivate')->name('activate');
-//         Route::get('/deactivate/{id}', 'CollectionController@doDeactivate')->name('deactivate');
-//         Route::get('/bulk-action', 'CollectionController@bulk_action')->name('bulk_action');
-//         Route::get('/add', 'CollectionController@add')->name('add');
-//         Route::post('/add', 'CollectionController@doAdd')->name('doAdd');
-//         // Route::post('/add/product', 'CollectionProductController@doAdd');
-//         // Route::post('/edit/product', 'CollectionProductController@doEdit');
-//         Route::get('/edit/{id}', 'CollectionController@edit')->name('edit');
-//         Route::post('/edit', 'CollectionController@doEdit')->name('doEdit');
-//         Route::get('/remove/{id}', 'CollectionController@doRemove')->name('remove');
-//         Route::get('/recycle', 'CollectionController@recycle')->name('recycle');
-//         Route::get('/restore/{id}', 'CollectionController@doRestore')->name('restore');
-//         Route::get('/delete/{id}', 'CollectionController@doDelete')->name('delete');
-
-//         // collection product
-//         Route::group(['prefix' => '{id}/modify', 'as' => 'product.'], function () {
-//             Route::get('/', 'CollectionProductController@index')->name('index');
-//             Route::get('/bulk-action', 'CollectionProductController@bulk_action')->name('bulk_action');
-//             Route::get('/activate/{product_id}', 'CollectionProductController@doActivate')->name('activate');
-//             Route::get('/deactivate/{product_id}', 'CollectionProductController@doDeactivate')->name('deactivate');
-//             Route::get('/remove/{product_id}', 'CollectionProductController@doRemove')->name('remove');
-//             Route::get('/restore/{product_id}', 'CollectionProductController@doRestore')->name('restore');
-//             Route::get('/delete/{product_id}', 'CollectionProductController@doDelete')->name('delete');
-//             Route::get('/add', 'CollectionProductController@add')->name('add');
-//             Route::post('/add', 'CollectionProductController@doAdd')->name('doAdd');
-//             Route::get('/edit/{product_id}', 'CollectionProductController@edit')->name('edit');
-//             Route::post('/edit', 'CollectionProductController@doEdit')->name('doEdit');
-//             Route::get('/recycle', 'CollectionProductController@recycle')->name('recycle');
-//         });
-//     });
-
-//     // Review
-//     Route::group(['prefix' => 'review', 'as' => 'review.'], function () {
-//         Route::get('/', 'ReviewController@index')->name('index');
-//         Route::get('/activate/{id}', 'ReviewController@doActivate')->name('activate');
-//         Route::get('/deactivate/{id}', 'ReviewController@doDeactivate')->name('deactivate');
-//         Route::get('/bulk-action', 'ReviewController@bulk_action')->name('bulk_action');
-//         Route::get('/detail/{id}', 'ReviewController@detail')->name('detail');
-//         Route::get('/remove/{id}', 'ReviewController@doRemove')->name('remove');
-//         Route::get('/restore/{id}', 'ReviewController@doRestore')->name('restore');
-//         Route::get('/delete/{id}', 'ReviewController@doDelete')->name('delete');
-//         Route::get('/recycle', 'ReviewController@recycle')->name('recycle');
-//     });
-
-//     // Order
-//     Route::group(['prefix' => 'order', 'as' => 'order.'], function () {
-//         Route::get('/', 'OrderController@index')->name('index');
-//         Route::get('/bulk-action', 'OrderController@bulk_action')->name('bulk_action');
-//         Route::get('/activate/{id}', 'OrderController@doActivate')->name('activate');
-//         Route::get('/deactivate/{id}', 'OrderController@doDeactivate')->name('deactivate');
-//         Route::get('/confirm/{id}', 'OrderController@doConfirm')->name('confirm');
-//         Route::get('/unconfirm/{id}', 'OrderController@doUnConfirm')->name('unconfirm');
-//         Route::get('/paid/{id}', 'OrderController@doPaid')->name('paid');
-//         Route::get('/unpaid/{id}', 'OrderController@doUnPaid')->name('unpaid');
-//         Route::get('/add', 'OrderController@add')->name('add');
-//         Route::post('/add', 'OrderController@doAdd')->name('doAdd');
-//         Route::get('/history', 'OrderController@history')->name('history');
-//         Route::get('/cancel', 'OrderController@cancel')->name('cancel');
-//         Route::get('/details/{id}', 'OrderController@detail')->name('detail');
-//         Route::get('/remove/{id}', 'OrderController@doRemove')->name('remove');
-//         Route::post('/update', 'OrderController@update')->name('update');
-//         Route::get('/recycle', 'OrderController@recycle')->name('recycle');
-//     });
-
-//     // users
-//     Route::group(['prefix' => 'user', 'as' => 'user.'], function () {
-//         Route::get('/', 'UserController@index')->name('index');
-//         Route::get('/activate/{id}', 'UserController@doActivate')->name('activate');
-//         Route::get('/deactivate/{id}', 'UserController@doDeactivate')->name('deactivate');
-//         Route::get('/promote/{id}', 'UserController@doPromote')->name('promote');
-//         Route::get('/bulk-action', 'UserController@bulk_action')->name('bulk_action');
-//         Route::get('/remove/{id}', 'UserController@doRemove')->name('remove');
-//         Route::get('/restore/{id}', 'UserController@doRestore')->name('restore');
-//         Route::get('/delete/{id}', 'UserController@doDelete')->name('delete');
-//         Route::get('/recycle', 'UserController@recycle')->name('recycle');
-//     });
-
-//     // advertise
-//     Route::group(['prefix' => 'advertise', 'as' => 'advertise.'], function () {
-//         Route::get('/', 'AdvertiseController@index')->name('index');
-//         Route::get('/bulk-action', 'AdvertiseController@bulk_action')->name('bulk_action');
-//         Route::get('/add', 'AdvertiseController@add')->name('add');
-//         Route::post('/add', 'AdvertiseController@doAdd')->name('doAdd');
-//         Route::get('/edit/{id}', 'AdvertiseController@edit')->name('edit');
-//         Route::post('/edit', 'AdvertiseController@doEdit')->name('doEdit');
-//         Route::get('/activate/{id}', 'AdvertiseController@doActivate')->name('activate');
-//         Route::get('/deactivate/{id}', 'AdvertiseController@doDeactivate')->name('deactivate');
-//         Route::get('/remove/{id}', 'AdvertiseController@doRemove')->name('remove');
-//         Route::get('/restore/{id}', 'AdvertiseController@doRestore')->name('restore');
-//         Route::get('/delete/{id}', 'AdvertiseController@doDelete')->name('delete');
-//         Route::get('/recycle', 'AdvertiseController@recycle')->name('recycle');
-//     });
-
-//     //tag
-//     Route::group(['prefix' => 'tag', 'as' => 'tag.'], function () {
-//         Route::get('/', 'TagController@index')->name('index');
-//         Route::get('/bulk-action', 'TagController@bulk_action')->name('bulk_action');
-//         Route::get('/activate/{id}', 'TagController@doActivate')->name('activate');
-//         Route::get('/deactivate/{id}', 'TagController@doDeactivate')->name('deactivate');
-//         Route::get('/add', 'TagController@add')->name('add');
-//         Route::post('/add', 'TagController@doAdd')->name('doAdd');
-//         Route::get('/edit/{id}', 'TagController@edit')->name('edit');
-//         Route::post('/edit', 'TagController@doEdit')->name('doEdit');
-//         Route::get('/remove/{id}', 'TagController@doRemove')->name('remove');
-//         Route::get('/recycle', 'TagController@recycle')->name('recycle');
-//         Route::get('/restore/{id}', 'TagController@doRestore')->name('restore');
-//         Route::get('/delete/{id}', 'TagController@doDelete')->name('delete');
-
-//         // Tag product
-//         Route::group(['prefix' => '{id}/modify', 'as' => 'product.'], function () {
-//             Route::get('/', 'TagProductController@index')->name('index');
-//             Route::get('/bulk-action', 'TagProductController@bulk_action')->name('bulk_action');
-//             Route::get('/activate/{product_id}', 'TagProductController@doActivate')->name('activate');
-//             Route::get('/deactivate/{product_id}', 'TagProductController@doDeactivate')->name('deactivate');
-//             Route::get('/remove/{product_id}', 'TagProductController@doRemove')->name('remove');
-//             Route::get('/restore/{product_id}', 'TagProductController@doRestore')->name('restore');
-//             Route::get('/delete/{product_id}', 'TagProductController@doDelete')->name('delete');
-//             Route::get('/add', 'TagProductController@add')->name('add');
-//             Route::post('/add', 'TagProductController@doAdd')->name('doAdd');
-//             Route::get('/edit/{product_id}', 'TagProductController@edit')->name('edit');
-//             Route::post('/edit', 'TagProductController@doEdit')->name('doEdit');
-//             Route::get('/recycle', 'TagProductController@recycle')->name('recycle');
-//         });
-//     });
-
-//     // contact
-//     Route::group(['prefix' => 'contact', 'as' => 'contact.'], function () {
-//         Route::get('/', 'ContactController@index')->name('index');
-//         Route::get('/bulk-action', 'ContactController@bulk_action')->name('bulk_action');
-//         Route::get('/detail/{id}', 'ContactController@detail')->name('detail');
-//         Route::get('/read/{id}', 'ContactController@doRead')->name('read');
-//         Route::get('/unread/{id}', 'ContactController@doUnread')->name('unread');
-//         Route::get('/remove/{id}', 'ContactController@doRemove')->name('remove');
-//         Route::get('/restore/{id}', 'ContactController@doRestore')->name('restore');
-//         Route::get('/delete/{id}', 'ContactController@doDelete')->name('delete');
-//         Route::get('/recycle', 'ContactController@recycle')->name('recycle');
-//     });
-// });

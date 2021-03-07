@@ -47,4 +47,32 @@ class Admin extends Authenticatable
         'email_verified_at' => 'datetime',
     ];
 
+        // scope
+        public function scopeActive($q)
+        {
+            return $q->whereVerified(1);
+        }
+        public function scopeGuest($q)
+        {
+            return $q->whereGuest(1);
+        }
+        public function uploadImage($image, $uploadImage)
+        {
+            $destination_path = 'public/images/admins';
+            $avatar = $uploadImage->getAvatar($image, $destination_path);
+            if ($uploadImage->upload($image, $destination_path, $avatar))
+                return $avatar;
+            else
+                return null;
+        }
+    
+        public function removeImage($image, $removeImage)
+        {
+            $destination_path = 'public/images/admins';
+            if ($removeImage->remove($destination_path, $image))
+                return true;
+            else
+                return false;
+        }
+
 }

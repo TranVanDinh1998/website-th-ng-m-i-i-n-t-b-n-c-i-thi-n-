@@ -35,6 +35,20 @@ class Order extends Model
     public function user() {
         return $this->hasOne(User::class);
     }
+
+    protected static function boot()
+    {
+        parent::boot();
+        self::deleting(function ($order) {
+            $order->orderDetails()->delete();
+            if ($order->forceDeleting) {
+                $order->orderDetails()->forceDelete();
+            }
+        });
+        self::restoring(function ($order) {
+            $order->orderDetails()->onlyTrashed()->restore();
+        });
+    }
     
     // filter
     public function scopeLatest($q)

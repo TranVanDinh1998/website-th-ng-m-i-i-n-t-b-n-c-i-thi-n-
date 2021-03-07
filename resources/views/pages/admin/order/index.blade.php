@@ -1,5 +1,5 @@
-@extends('admin.layout')
-@section('title', 'Orders management')
+@extends('layouts.admin.index')
+@section('title', 'Đơn hàng')
 @section('content')
     <!--main content start-->
     <section id="main-content">
@@ -7,21 +7,21 @@
             <div class="table-agile-info">
                 <div class="panel panel-default">
                     <div class="panel-heading">
-                        Orders
+                        Đơn hàng
                     </div>
                     <div class="row w3-res-tb">
                         <div class="col-sm-5 m-b-xs">
                             <span class="btn-group">
                                 <a href="{{ route('admin.order.index') }}" class="btn btn-sm btn-default"><i
-                                        class="fa fa-refresh"></i> Refresh</a>
+                                        class="fa fa-refresh"></i> Tải lại trang</a>
                                 <a href="{{ route('admin.order.history') }}" class="btn btn-sm btn-default"><i
-                                        class="fa fa-film"></i> History</a>
+                                        class="fa fa-film"></i> Lịch sử giao dịch</a>
                                 <a href="{{ route('admin.order.cancel') }}" class="btn btn-sm btn-default"><i
-                                        class="fa fa-remove"></i>Cancel</a>
-                                <a href="{{ route('admin.order.add') }}" class="btn btn-sm btn-success"><i
-                                        class="fa fa-plus"></i> Add</a>
+                                        class="fa fa-remove"></i>Đơn hàng bị hủy</a>
+                                <a href="{{ route('admin.order.create') }}" class="btn btn-sm btn-success"><i
+                                        class="fa fa-plus"></i> Thêm mới</a>
                                 <a href="{{ route('admin.order.recycle') }}" class="btn btn-sm btn-danger"><i
-                                        class="fa fa-trash"></i> Recycle</a>
+                                        class="fa fa-trash"></i> Thùng rác</a>
                             </span>
                         </div>
                         <div class="col-sm-2">
@@ -34,14 +34,14 @@
                             <div class="col-sm-5 m-b-xs">
                                 <select id="bulk_action" name="bulk_action"
                                     class="input-sm form-control w-sm inline v-middle">
-                                    <option>Bulk action</option>
-                                    <option value="0">Deactivate</option>
-                                    <option value="2">Confirm</option>
-                                    <option value="4">Paid</option>
-                                    <option value="5">Unpaid</option>
-                                    <option value="6">Remove</option>
+                                    <option>Thao tác đa mục tiêu</option>
+                                    <option value="0">Ngừng hoạt động</option>
+                                    <option value="2">Hoàn thiện</option>
+                                    <option value="4">Thanh toán</option>
+                                    <option value="5">Chưa thanh toán</option>
+                                    <option value="6">Loại bỏ</option>
                                 </select>
-                                <button class="btn btn-sm btn-default">Apply</button>
+                                <button class="btn btn-sm btn-default">Áp dụng</button>
                             </div>
                             <div class="col-sm-4">
                             </div>
@@ -85,11 +85,11 @@
                                                 </ul>
                                             </div>
                                         </th>
-                                        <th>Receiver</th>
+                                        <th>Người nhận</th>
                                         <th>
                                             <div class="dropdown">
                                                 <button class="btn dropdown-toggle" type="button"
-                                                    data-toggle="dropdown">Create at
+                                                    data-toggle="dropdown">Tạo lúc
                                                     <span class="caret"></span></button>
                                                 <ul class="dropdown-menu">
                                                     <li @if ($sort_date == 0)
@@ -109,7 +109,7 @@
                                         <th>
                                             <div class="dropdown">
                                                 <button class="btn dropdown-toggle" type="button"
-                                                    data-toggle="dropdown">Total
+                                                    data-toggle="dropdown">Thành tiền
                                                     <span class="caret"></span></button>
                                                 <ul class="dropdown-menu">
                                                     <li @if ($sort_total == null)
@@ -133,7 +133,7 @@
                                         <th>
                                             <div class="dropdown">
                                                 <button class="btn dropdown-toggle" type="button"
-                                                    data-toggle="dropdown">Status
+                                                    data-toggle="dropdown">Trạng thái
                                                     <span class="caret"></span></button>
                                                 <ul class="dropdown-menu">
                                                     <li @if ($status == null)
@@ -169,7 +169,7 @@
                                         <th>
                                             <div class="dropdown">
                                                 <button class="btn dropdown-toggle" type="button"
-                                                    data-toggle="dropdown">Payment
+                                                    data-toggle="dropdown">Thanh toán
                                                     <span class="caret"></span></button>
                                                 <ul class="dropdown-menu">
                                                     <li @if ($sort_paid == null)
@@ -190,7 +190,7 @@
                                                 </ul>
                                             </div>
                                         </th>
-                                        <th colspan="3">Action</th>
+                                        <th colspan="3">Hành động</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -205,55 +205,55 @@
                                                 {{ $order->id }}
                                             </td>
                                             <td>
-                                                {{$order->shipping_address->name}}
+                                                {{$order->shippingAddress->name}}
                                             </td>
-                                            <td>{{ $order->create_date }}</td>
+                                            <td>{{ $order->created_at }}</td>
                                             <td>
                                                 <span class="text-ellipsis">
-                                                    {{$order->shipping_address->address.', '.$order->shipping_address->ward.', '.$order->shipping_address->district.', '.$order->shipping_address->province}}
+                                                    {{$order->shippingAddress->address.', '.$order->shippingAddress->ward.', '.$order->shippingAddress->district.', '.$order->shippingAddress->province}}
                                                 </span>
                                             </td>
                                             <td>{{ $order->total }}</td>
                                             <td>
                                                 @switch($order->status)
                                                     @case(0)
-                                                    Pending
+                                                    Đang chờ xử lý
                                                     @break
                                                     @case(1)
-                                                    Waiting for goods
+                                                    Chờ hàng
                                                     @break
                                                     @case(2)
-                                                    On Delivery
+                                                    Đang giao
                                                     @break
                                                     @case(3)
-                                                    Delivered
+                                                    Đã giao
                                                     @break
                                                 @endswitch
                                             </td>
                                             <td>
-                                                @if ($order->is_paid == 0)
-                                                    No
+                                                @if ($order->paid == 1)
+                                                    Có
                                                 @else
-                                                    Yes
+                                                    Không
                                                 @endif
                                             </td>
                                             <td>
                                                 <a onclick="return confirm('Are you sure?')"
-                                                    href="{{ route('admin.order.deactivate', ['id' => $order->id]) }}"
+                                                    href="{{ route('admin.order.verify', ['id' => $order->id,'verified'=>0]) }}"
                                                     class="btn btn-default" title="Deactivate">
                                                     <span class="glyphicon glyphicon-remove"></span>
                                                 </a>
                                             </td>
                                             <td>
-                                                @if ($order->is_paid == 0)
+                                                @if ($order->paid == 0)
                                                     <a onclick="return confirm('Are you sure?')"
-                                                        href="{{ route('admin.order.paid', ['id' => $order->id]) }}"
+                                                        href="{{ route('admin.order.pay', ['id' => $order->id,'paid'=>1]) }}"
                                                         class="btn btn-default" title="Paid">
                                                         <span class="glyphicon glyphicon-check"></span>
                                                     </a>
                                                 @else
                                                     <a onclick="return confirm('Are you sure?')"
-                                                        href="{{ route('admin.order.unpaid', ['id' => $order->id]) }}"
+                                                        href="{{ route('admin.order.pay', ['id' => $order->id,'paid'=>0]) }}"
                                                         class="btn btn-default" title="Un paid">
                                                         <span class="glyphicon glyphicon-remove"></span>
                                                     </a>
@@ -261,20 +261,20 @@
                                             </td>
                                             <td>
                                                 <a onclick="return confirm('Are you sure?')"
-                                                    href="{{ route('admin.order.confirm', ['id' => $order->id]) }}"
+                                                    href="{{ route('admin.order.confirm', ['id' => $order->id,'confirmed'=>1]) }}"
                                                     class="btn btn-default" title="Confirm"><span
                                                         class="glyphicon glyphicon-ok"></span>
                                                 </a>
                                             </td>
                                             <td>
                                                 <a class="btn btn-info"
-                                                    href="{{ route('admin.order.detail', ['id' => $order->id]) }}">
+                                                    href="{{ route('admin.order.edit', ['id' => $order->id]) }}">
                                                     <span class="glyphicon glyphicon-edit"></span>
                                                 </a>
                                             </td>
                                             <td>
                                                 <a onclick="return confirm('Are you sure?')"
-                                                    href="{{ route('admin.order.remove', ['id' => $order->id]) }}"
+                                                    href="{{ route('admin.order.delete', ['id' => $order->id]) }}"
                                                     class="btn btn-danger"><span class="glyphicon glyphicon-trash"></span>
                                                 </a>
                                             </td>
@@ -287,8 +287,8 @@
                             <div class="row">
                                 <div class="col-sm-5">
                                     <div class="dropdown">
-                                        <button class="btn dropdown-toggle" type="button" data-toggle="dropdown">View :
-                                            {{ $view }} of {{ $count_order }} item(s)
+                                        <button class="btn dropdown-toggle" type="button" data-toggle="dropdown">Hiển thị :
+                                            {{ $view }} của {{ $orders_count }} đơn hàng
                                             <span class="caret"></span></button>
                                         <ul class="dropdown-menu">
                                             <li @if ($view == 10)
@@ -321,7 +321,7 @@
                                 </div>
                                 <div class="col-sm-7 text-right text-center-xs">
                                     <ul class="pagination pagination-sm m-t-none m-b-none">
-                                        {!! $orders->links() !!}
+                                        {!! $orders->withQueryString()->links() !!}
                                     </ul>
                                 </div>
                             </div>
@@ -330,7 +330,7 @@
             </div>
         </section>
         <!-- footer -->
-        @include('admin.footer')
+        @include('components.admin.footer')
         <!-- / footer -->
     </section>
 

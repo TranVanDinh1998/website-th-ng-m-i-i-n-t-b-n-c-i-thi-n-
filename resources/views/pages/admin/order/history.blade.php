@@ -1,29 +1,29 @@
-@extends('admin.layout')
-@section('title', 'Orders management')
+@extends('layouts.admin.index')
+@section('title', 'Lịch sử giao dịch')
 @section('content')
     <!--main content start-->
     <section id="main-content">
         <section class="wrapper">
             <ol class="breadcrumb">
-                <li><a href="{{ route('admin.order.index') }}">Order management</a></li>
-                <li class="active">Cancel order</li>
+                <li><a href="{{ route('admin.order.history') }}">Đơn hàng</a></li>
+                <li class="active">Lịch sử giao dịch</li>
             </ol>
             <div class="table-agile-info">
                 <div class="panel panel-default">
                     <div class="panel-heading">
-                        Orders - History transaction
+                        Đơn hàng - lịch sử giao dịch
                     </div>
                     <div class="row w3-res-tb">
                         <div class="col-sm-5 m-b-xs">
                             <span class="btn-group">
                                 <a href="{{ route('admin.order.history') }}" class="btn btn-sm btn-default"><i
-                                        class="fa fa-refresh"></i> Refresh</a>
+                                        class="fa fa-refresh"></i> Tải lại trang</a>
                                 <a href="{{ route('admin.order.cancel') }}" class="btn btn-sm btn-default"><i
-                                        class="fa fa-remove"></i>Cancel</a>
-                                <a href="{{ route('admin.order.add') }}" class="btn btn-sm btn-success"><i
-                                        class="fa fa-plus"></i> Add</a>
+                                        class="fa fa-remove"></i>Đơn hàng đã hủy</a>
+                                <a href="{{ route('admin.order.create') }}" class="btn btn-sm btn-success"><i
+                                        class="fa fa-plus"></i> Thêm mới</a>
                                 <a href="{{ route('admin.order.recycle') }}" class="btn btn-sm btn-danger"><i
-                                        class="fa fa-trash"></i> Recycle</a>
+                                        class="fa fa-trash"></i> Thùng rác</a>
                             </span>
                         </div>
                         <div class="col-sm-2">
@@ -36,11 +36,11 @@
                             <div class="col-sm-5 m-b-xs">
                                 <select id="bulk_action" name="bulk_action"
                                     class="input-sm form-control w-sm inline v-middle">
-                                    <option>Bulk action</option>
-                                    <option value="3">Undone</option>
-                                    <option value="6">Remove</option>
+                                    <option>Thao tác đa mục tiêu</option>
+                                    <option value="3">Chưa hoàn thiện</option>
+                                    <option value="6">Loại bỏ</option>
                                 </select>
-                                <button class="btn btn-sm btn-default">Apply</button>
+                                <button class="btn btn-sm btn-default">Áp dụng</button>
                             </div>
                             <div class="col-sm-4">
                             </div>
@@ -74,32 +74,32 @@
                                                     <li @if ($sort_id == 0)
                                                         class="active"
                                                         @endif><a
-                                                            href="{{ route('admin.order.index', ['sort_id' => 0, 'status' => $status, 'sort_total' => $sort_total, 'sort_date' => $sort_date, 'view' => $view]) }}">Inc</a>
+                                                            href="{{ route('admin.order.history', ['sort_id' => 0, 'status' => $status, 'sort_total' => $sort_total, 'sort_date' => $sort_date, 'view' => $view]) }}">Inc</a>
                                                     </li>
                                                     <li @if ($sort_id == 1)
                                                         class="active"
                                                         @endif><a
-                                                            href="{{ route('admin.order.index', ['sort_id' => 1, 'status' => $status, 'sort_total' => $sort_total, 'sort_date' => $sort_date, 'view' => $view]) }}">Desc</a>
+                                                            href="{{ route('admin.order.history', ['sort_id' => 1, 'status' => $status, 'sort_total' => $sort_total, 'sort_date' => $sort_date, 'view' => $view]) }}">Desc</a>
                                                     </li>
                                                 </ul>
                                             </div>
                                         </th>
-                                        <th>Receiver</th>
+                                        <th>Người nhận</th>
                                         <th>
                                             <div class="dropdown">
                                                 <button class="btn dropdown-toggle" type="button"
-                                                    data-toggle="dropdown">Create at
+                                                    data-toggle="dropdown">Tạo lúc
                                                     <span class="caret"></span></button>
                                                 <ul class="dropdown-menu">
                                                     <li @if ($sort_date == 0)
                                                         class="active"
                                                         @endif><a
-                                                            href="{{ route('admin.order.index', ['sort_id' => 0, 'status' => $status, 'sort_total' => $sort_total, 'sort_date' => 0, 'view' => $view]) }}">Inc</a>
+                                                            href="{{ route('admin.order.history', ['sort_id' => 0, 'status' => $status, 'sort_total' => $sort_total, 'sort_date' => 0, 'view' => $view]) }}">Inc</a>
                                                     </li>
                                                     <li @if ($sort_date == 1)
                                                         class="active"
                                                         @endif><a
-                                                            href="{{ route('admin.order.index', ['sort_id' => 1, 'status' => $status, 'sort_total' => $sort_total, 'sort_date' => 1, 'view' => $view]) }}">Desc</a>
+                                                            href="{{ route('admin.order.history', ['sort_id' => 1, 'status' => $status, 'sort_total' => $sort_total, 'sort_date' => 1, 'view' => $view]) }}">Desc</a>
                                                     </li>
                                                 </ul>
                                             </div>
@@ -108,23 +108,23 @@
                                         <th>
                                             <div class="dropdown">
                                                 <button class="btn dropdown-toggle" type="button"
-                                                    data-toggle="dropdown">Total
+                                                    data-toggle="dropdown">Thành tiền
                                                     <span class="caret"></span></button>
                                                 <ul class="dropdown-menu">
                                                     <li @if ($sort_total == null)
                                                         class="active"
                                                         @endif><a
-                                                            href="{{ route('admin.order.index', ['sort_id' => $sort_id, 'sort_date' => $sort_date, 'status' => $status, 'view' => $view]) }}">All</a>
+                                                            href="{{ route('admin.order.history', ['sort_id' => $sort_id, 'sort_date' => $sort_date, 'status' => $status, 'view' => $view]) }}">All</a>
                                                     </li>
                                                     <li @if ($sort_total == 0 && $sort_total != null)
                                                         class="active"
                                                         @endif><a
-                                                            href="{{ route('admin.order.index', ['sort_id' => 0, 'status' => $status, 'sort_total' => 0, 'sort_date' => $sort_date, 'view' => $view]) }}">Inc</a>
+                                                            href="{{ route('admin.order.history', ['sort_id' => 0, 'status' => $status, 'sort_total' => 0, 'sort_date' => $sort_date, 'view' => $view]) }}">Inc</a>
                                                     </li>
                                                     <li @if ($sort_total == 1 && $sort_total != null)
                                                         class="active"
                                                         @endif><a
-                                                            href="{{ route('admin.order.index', ['sort_id' => 1, 'status' => $status, 'sort_total' => 1, 'sort_date' => $sort_date, 'view' => $view]) }}">Desc</a>
+                                                            href="{{ route('admin.order.history', ['sort_id' => 1, 'status' => $status, 'sort_total' => 1, 'sort_date' => $sort_date, 'view' => $view]) }}">Desc</a>
                                                     </li>
                                                 </ul>
                                             </div>
@@ -132,35 +132,35 @@
                                         <th>
                                             <div class="dropdown">
                                                 <button class="btn dropdown-toggle" type="button"
-                                                    data-toggle="dropdown">Status
+                                                    data-toggle="dropdown">Trạng thái
                                                     <span class="caret"></span></button>
                                                 <ul class="dropdown-menu">
                                                     <li @if ($status == null)
                                                         class="active"
                                                         @endif><a
-                                                            href="{{ route('admin.order.index', ['sort_id' => $sort_id, 'sort_total' => $sort_total, 'sort_date' => $sort_date, 'view' => $view]) }}">All</a>
+                                                            href="{{ route('admin.order.history', ['sort_id' => $sort_id, 'sort_total' => $sort_total, 'sort_date' => $sort_date, 'view' => $view]) }}">All</a>
                                                     </li>
                                                     <li @if ($status == 0 && $status != null)
                                                         class="active"
                                                         @endif><a
-                                                            href="{{ route('admin.order.index', ['sort_id' => $sort_id, 'status' => '0', 'sort_total' => $sort_total, 'sort_date' => $sort_date, 'view' => $view]) }}">Pending</a>
+                                                            href="{{ route('admin.order.history', ['sort_id' => $sort_id, 'status' => '0', 'sort_total' => $sort_total, 'sort_date' => $sort_date, 'view' => $view]) }}">Pending</a>
                                                     </li>
                                                     <li @if ($status == 1 && $status != null)
                                                         class="active"
                                                         @endif><a
-                                                            href="{{ route('admin.order.index', ['sort_id' => $sort_id, 'status' => '1', 'sort_total' => $sort_total, 'sort_date' => $sort_date, 'view' => $view]) }}">Waiting
+                                                            href="{{ route('admin.order.history', ['sort_id' => $sort_id, 'status' => '1', 'sort_total' => $sort_total, 'sort_date' => $sort_date, 'view' => $view]) }}">Waiting
                                                             for goods</a>
                                                     </li>
                                                     <li @if ($status == 2 && $status != null)
                                                         class="active"
                                                         @endif><a
-                                                            href="{{ route('admin.order.index', ['sort_id' => $sort_id, 'status' => '2', 'sort_total' => $sort_total, 'sort_date' => $sort_date, 'view' => $view]) }}">On
+                                                            href="{{ route('admin.order.history', ['sort_id' => $sort_id, 'status' => '2', 'sort_total' => $sort_total, 'sort_date' => $sort_date, 'view' => $view]) }}">On
                                                             Delivery</a>
                                                     </li>
                                                     <li @if ($status == 3 && $status != null)
                                                         class="active"
                                                         @endif><a
-                                                            href="{{ route('admin.order.index', ['sort_id' => $sort_id, 'status' => '3', 'sort_total' => $sort_total, 'sort_date' => $sort_date, 'view' => $view]) }}">Delivered</a>
+                                                            href="{{ route('admin.order.history', ['sort_id' => $sort_id, 'status' => '3', 'sort_total' => $sort_total, 'sort_date' => $sort_date, 'view' => $view]) }}">Delivered</a>
                                                     </li>
                                                 </ul>
                                             </div>
@@ -168,28 +168,28 @@
                                         <th>
                                             <div class="dropdown">
                                                 <button class="btn dropdown-toggle" type="button"
-                                                    data-toggle="dropdown">Payment
+                                                    data-toggle="dropdown">Thanh toán
                                                     <span class="caret"></span></button>
                                                 <ul class="dropdown-menu">
                                                     <li @if ($sort_paid == null)
                                                         class="active"
                                                         @endif><a
-                                                            href="{{ route('admin.order.index', ['sort_id' => $sort_id, 'sort_date' => $sort_date, 'status' => $status, 'view' => $view]) }}">All</a>
+                                                            href="{{ route('admin.order.history', ['sort_id' => $sort_id, 'sort_date' => $sort_date, 'status' => $status, 'view' => $view]) }}">All</a>
                                                     </li>
                                                     <li @if ($sort_paid == 0 && $sort_paid != null)
                                                         class="active"
                                                         @endif><a
-                                                            href="{{ route('admin.order.index', ['sort_paid' => 0, 'sort_id' => $sort_id, 'status' => $status, 'sort_total' => 0, 'sort_date' => $sort_date, 'view' => $view]) }}">No</a>
+                                                            href="{{ route('admin.order.history', ['sort_paid' => 0, 'sort_id' => $sort_id, 'status' => $status, 'sort_total' => 0, 'sort_date' => $sort_date, 'view' => $view]) }}">No</a>
                                                     </li>
                                                     <li @if ($sort_paid == 1 && $sort_paid != null)
                                                         class="active"
                                                         @endif><a
-                                                            href="{{ route('admin.order.index', ['sort_paid' => 1, 'sort_id' => $sort_id, 'status' => $status, 'sort_total' => 1, 'sort_date' => $sort_date, 'view' => $view]) }}">Yes</a>
+                                                            href="{{ route('admin.order.history', ['sort_paid' => 1, 'sort_id' => $sort_id, 'status' => $status, 'sort_total' => 1, 'sort_date' => $sort_date, 'view' => $view]) }}">Yes</a>
                                                     </li>
                                                 </ul>
                                             </div>
                                         </th>
-                                        <th colspan="3">Action</th>
+                                        <th colspan="3">Hành động</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -204,66 +204,43 @@
                                                 {{ $order->id }}
                                             </td>
                                             <td>
-                                                @foreach ($addresses as $address)
-                                                    @if ($address->id == $order->shipping_address_id)
-                                                        {{ $address->name }}
-                                                    @endif
-                                                @endforeach
+                                                {{$order->shippingAddress->name}}
                                             </td>
-                                            <td>{{ $order->create_date }}</td>
+                                            <td>{{ $order->created_at }}</td>
                                             <td>
                                                 <span class="text-ellipsis">
-                                                    @foreach ($addresses as $address)
-                                                        @if ($address->id == $order->shipping_address_id)
-                                                            {{ $address->address }} ,
-                                                            @foreach ($wards as $ward)
-                                                                @if ($ward->id == $address->ward_id)
-                                                                    {{ $ward->name }} ,
-                                                                @endif
-                                                            @endforeach
-                                                            @foreach ($districts as $district)
-                                                                @if ($district->id == $address->district_id)
-                                                                    {{ $district->name }} ,
-                                                                @endif
-                                                            @endforeach
-                                                            @foreach ($provinces as $province)
-                                                                @if ($province->id == $address->province_id)
-                                                                    {{ $province->name }}
-                                                                @endif
-                                                            @endforeach
-                                                        @endif
-                                                    @endforeach
+                                                    {{$order->shippingAddress->address.', '.$order->shippingAddress->ward.', '.$order->shippingAddress->district.', '.$order->shippingAddress->province}}
                                                 </span>
                                             </td>
                                             <td>{{ $order->total }}</td>
                                             <td>
                                                 @switch($order->status)
                                                     @case(0)
-                                                    Pending
+                                                    Đang chờ xử lý
                                                     @break
                                                     @case(1)
-                                                    Waiting for goods
+                                                    Chờ hàng
                                                     @break
                                                     @case(2)
-                                                    On Delivery
+                                                    Đang giao
                                                     @break
                                                     @case(3)
-                                                    Delivered
+                                                    Đã giao
                                                     @break
                                                 @endswitch
                                             </td>
                                             <td>
-                                                @if ($order->is_paid == 0)
-                                                    No
+                                                @if ($order->paid == 1)
+                                                    Có
                                                 @else
-                                                    Yes
+                                                    Không
                                                 @endif
                                             </td>
                                             <td>
                                                 <a onclick="return confirm('Are you sure?')"
-                                                    href="{{ route('admin.order.activate', ['id' => $order->id]) }}"
-                                                    class="btn btn-default" title="Activate">
-                                                    <span class="glyphicon glyphicon-check"></span>
+                                                    href="{{ route('admin.order.confirm', ['id' => $order->id,'confirmed'=>0]) }}"
+                                                    class="btn btn-default" title="đơn hàng chưa hoàn thiện"><span
+                                                        class="glyphicon glyphicon-ok"></span>
                                                 </a>
                                             </td>
                                             <td>
@@ -274,7 +251,7 @@
                                             </td>
                                             <td>
                                                 <a onclick="return confirm('Are you sure?')"
-                                                    href="{{ route('admin.order.remove', ['id' => $order->id]) }}"
+                                                    href="{{ route('admin.order.delete', ['id' => $order->id]) }}"
                                                     class="btn btn-danger"><span class="glyphicon glyphicon-trash"></span>
                                                 </a>
                                             </td>
@@ -287,41 +264,41 @@
                             <div class="row">
                                 <div class="col-sm-5">
                                     <div class="dropdown">
-                                        <button class="btn dropdown-toggle" type="button" data-toggle="dropdown">View :
-                                            {{ $view }} of {{ $count_order }} item(s)
+                                        <button class="btn dropdown-toggle" type="button" data-toggle="dropdown">Hiển thị :
+                                            {{ $view }} của {{ $orders_count }} đơn hàng
                                             <span class="caret"></span></button>
                                         <ul class="dropdown-menu">
                                             <li @if ($view == 10)
                                                 class="active"
                                                 @endif><a
-                                                    href="{{ route('admin.order.index', ['sort_id' => $sort_id, 'sort_total' => $sort_total, 'sort_date' => $sort_date, 'status' => $status, 'view' => 10]) }}">10</a>
+                                                    href="{{ route('admin.order.history', ['sort_id' => $sort_id, 'sort_total' => $sort_total, 'sort_date' => $sort_date, 'status' => $status, 'view' => 10]) }}">10</a>
                                             </li>
                                             <li @if ($view == 15)
                                                 class="active"
                                                 @endif><a
-                                                    href="{{ route('admin.order.index', ['sort_id' => $sort_id, 'sort_total' => $sort_total, 'sort_date' => $sort_date, 'status' => $status, 'view' => 15]) }}">15</a>
+                                                    href="{{ route('admin.order.history', ['sort_id' => $sort_id, 'sort_total' => $sort_total, 'sort_date' => $sort_date, 'status' => $status, 'view' => 15]) }}">15</a>
                                             </li>
                                             <li @if ($view == 20)
                                                 class="active"
                                                 @endif><a
-                                                    href="{{ route('admin.order.index', ['sort_id' => $sort_id, 'sort_total' => $sort_total, 'sort_date' => $sort_date, 'status' => $status, 'view' => 20]) }}">20</a>
+                                                    href="{{ route('admin.order.history', ['sort_id' => $sort_id, 'sort_total' => $sort_total, 'sort_date' => $sort_date, 'status' => $status, 'view' => 20]) }}">20</a>
                                             </li>
                                             <li @if ($view == 30)
                                                 class="active"
                                                 @endif><a
-                                                    href="{{ route('admin.order.index', ['sort_id' => $sort_id, 'sort_total' => $sort_total, 'sort_date' => $sort_date, 'status' => $status, 'view' => 30]) }}">30</a>
+                                                    href="{{ route('admin.order.history', ['sort_id' => $sort_id, 'sort_total' => $sort_total, 'sort_date' => $sort_date, 'status' => $status, 'view' => 30]) }}">30</a>
                                             </li>
                                             <li @if ($view == 40)
                                                 class="active"
                                                 @endif><a
-                                                    href="{{ route('admin.order.index', ['sort_id' => $sort_id, 'sort_total' => $sort_total, 'sort_date' => $sort_date, 'status' => $status, 'view' => 40]) }}">40</a>
+                                                    href="{{ route('admin.order.history', ['sort_id' => $sort_id, 'sort_total' => $sort_total, 'sort_date' => $sort_date, 'status' => $status, 'view' => 40]) }}">40</a>
                                             </li>
                                         </ul>
                                     </div>
                                 </div>
                                 <div class="col-sm-7 text-right text-center-xs">
                                     <ul class="pagination pagination-sm m-t-none m-b-none">
-                                        {!! $orders->links() !!}
+                                        {!! $orders->withQueryString()->links() !!}
                                     </ul>
                                 </div>
                             </div>
@@ -330,7 +307,7 @@
             </div>
         </section>
         <!-- footer -->
-        @include('admin.footer')
+        @include('components.admin.footer')
         <!-- / footer -->
     </section>
 

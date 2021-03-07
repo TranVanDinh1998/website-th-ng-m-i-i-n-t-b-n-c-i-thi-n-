@@ -62,4 +62,14 @@ class Review extends Model
         }
         return $query;
     }
+    public function scopeActive($query)
+    {
+        $query->where('verified', 1);
+        return $query;
+    }
+    public function scopeInactive($query)
+    {
+        $query->where('verified', 0);
+        return $query;
+    }
 }

@@ -1,16 +1,16 @@
-@extends('admin.layout')
-@section('title', 'Order management')
+@extends('layouts.admin.index')
+@section('title', 'Đơn hàng')
 @section('content')
     <!--main content start-->
     <section id="main-content">
         <section class="wrapper">
             <ol class="breadcrumb">
-                <li><a href="{{ route('admin.order.index') }}">Order management</a></li>
-                <li class="active">Order #{{ $order->id }}</li>
+                <li><a href="{{ route('admin.order.index') }}">Đơn hàng</a></li>
+                <li class="active">Đơn hàng #{{ $order->id }}</li>
             </ol>
             <section class="panel">
                 <div class="panel-heading">
-                    Order's information
+                    Thông tin đơn hàng
                     <span class="tools pull-right">
                         <a href="javascript:;" class="fa fa-chevron-down"></a>
                     </span>
@@ -18,105 +18,81 @@
                 <div class="panel-body">
                     <div class="position-center">
                         <form id="update_order_form" enctype="multipart/form-data"
-                            action="{{route('admin.order.update') }}" method="POST">
+                            action="{{route('admin.order.update',['id'=>$order->id]) }}" method="POST">
                             @csrf
+                            <div class="panel">
+                                @if (count($errors) > 0)
+                                    @foreach ($errors->all() as $error)
+                                        <p class="alert alert-danger">{{ $error }}</p>
+                                    @endforeach
+                                @endif
+                                @if (session('success'))
+                                    <p class="alert-success alert">{{ session('success') }}</p>
+                                @endif
+                                @if (session('error'))
+                                <p class="alert-success alert">{{ session('error') }}</p>
+                            @endif
+                            </div>
                             <div class="form-group">
-                                <label for="name">Create at</label>
-                                <input type="date" class="form-control" value="{{ $order->create_date }}" disabled>
+                                <label for="name">Tạo lúc</label>
+                                <input type="date" class="form-control" value="{{ $order->created_at }}" disabled>
                                 <input type="hidden" class="form-control" name="id" placeholder="name"
                                     value="{{ $order->id }}">
                             </div>
                             <div class="form-group">
-                                <label for="name">Ship to </label>
+                                <label for="name">Đưa tới</label>
                                 <div class="row">
                                     <input type="text" class="form-control"
-                                        value="{{ $order->shipping_address->address . ', ' . $order->shipping_address->ward . ', ' . $order->shipping_address->district . ', ' . $order->shipping_address->province }}"
+                                        value="{{ $order->shippingAddress->address . ', ' . $order->shippingAddress->ward . ', ' . $order->shippingAddress->district . ', ' . $order->shippingAddress->province }}"
                                         disabled>
                                 </div>
                             </div>
                             <div class="form-group">
-                                <label for="name">Sub total</label>
+                                <label for="name">Tổng cộng</label>
                                 <input type="number" class="form-control" value="{{ $order->sub_total }}" disabled>
                             </div>
                             <div class="form-group">
-                                <label for="name">Discount</label>
+                                <label for="name">Giảm giá</label>
                                 <input type="number" class="form-control" value="{{ $order->discount }}" disabled>
                             </div>
                             <div class="form-group">
-                                <label for="name">Total</label>
+                                <label for="name">Thành tiền</label>
                                 <input type="number" class="form-control" value="{{ $order->total }}" disabled>
                             </div>
                             <div class="form-group">
-                                <label for="name">Status</label>
+                                <label for="name">Trạng thái</label>
                                 <select class="form-control" name="status">
                                     <option value="0" @if ($order->status == 0)
                                         selected
-                                        @endif>Pending</option>
+                                        @endif>Đang chờ xử lý</option>
                                     <option value="1" @if ($order->status == 1)
                                         selected
-                                        @endif>Waiting for goods</option>
+                                        @endif>Chờ hàng</option>
                                     <option value="2" @if ($order->status == 2)
                                         selected
-                                        @endif>On Delivery</option>
+                                        @endif>Đang đưa hàng</option>
                                     <option value="3" @if ($order->status == 3)
                                         selected
-                                        @endif>Delivered</option>
+                                        @endif>Đã giao</option>
                                 </select>
                             </div>
                             <div class="form-group">
-                                <label for="name">Payment</label>
+                                <label for="name">Thanh toán</label>
                                 <select class="form-control" name="payment">
                                     <option value="1" @if ($order->is_paid == 1)
                                         selected
-                                        @endif>Paid</option>
+                                        @endif>Đã thanh toán</option>
                                     <option value="0" @if ($order->is_paid == 0)
                                         selected
-                                        @endif>Unpaid</option>
+                                        @endif>Chưa thanh toán</option>
                                 </select>
                             </div>
-                            @if ($order->payment != null)
-                                <h3>Credit card</h3>
-                                <div class="form-group">
-                                    <label for="name">Owner name: </label>
-                                    <input type="text" class="form-control" value="{{ $order->payment->name }}" disabled>
-                                </div>
-                                <div class="form-group">
-                                    <label for="name">Type: </label>
-                                    <input type="text" class="form-control" @switch($order->payment->type)
-                                        @case(1)
-                                        value="American Express"
-                                        @break
-                                        @case(2)
-                                        value="Visa"
-                                        @break
-                                        @case(3)
-                                        value="MasterCard"
-                                        @break
-                                        @case(4)
-                                        value="Discover"
-                                        @break
-                                    @endswitch
-                                    disabled>
-                                </div>
-                                <div class="form-group">
-                                    <label for="name">Card number: </label>
-                                    <input type="text" class="form-control" value="{{ $order->payment->card_number }}"
-                                        disabled>
-                                </div>
-                                <div class="form-group">
-                                    <label for="name">Expiration time: </label>
-                                    <input type="text" class="form-control"
-                                        value="{{ $order->payment->expire_month . '/' . $order->payment->expire_year }}"
-                                        disabled>
-                                </div>
-                            @endif
                             <div class="form-group">
                                 <div class="col-sm-2 col-sm-hidden"></div>
                                 <div class="col-sm-10">
-                                    <button type="submit" class="btn btn-primary">Submit</button>
+                                    <button type="submit" class="btn btn-primary">Lưu</button>
                                 </div>
                             </div>
-                            <div id="errorMessage"></div>
                         </form>
                     </div>
                 </div>
@@ -133,28 +109,26 @@
                         <table class="table table-striped b-t b-light">
                             <thead>
                                 <tr>
-                                    <th>Image</th>
-                                    <th>Product</th>
-                                    <th>Price</th>
-                                    <th>Quantity</th>
-                                    <th>Total</th>
+                                    <th>Hình ảnh</th>
+                                    <th>Sản phẩm</th>
+                                    <th>Đơn giá</th>
+                                    <th>Số lượng</th>
+                                    <th>Thành tiền</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                @foreach ($order_details as $detail)
+                                @foreach ($order->orderDetails as $detail)
                                     <tr class="first odd">
-                                        @foreach ($order_detail_products as $product)
-                                            @if ($detail->product_id == $product->id)
                                                 <td class="image">
                                                     <a class="product-image" title="Sample Product"
-                                                        href="{{ URL::to('product-details/' . $product->idd) }}"><img
+                                                        href="{{ route('product_details' ,['id'=> $detail->product->id]) }}"><img
                                                             width="100" height="auto" alt="Sample Product"
-                                                            src="{{ url('uploads/products-images/' . $product->id . '/' . $product->image) }}"></a>
+                                                            src="{{ asset('storage/images/products/' . $detail->product->image) }}"></a>
                                                 </td>
                                                 <td>
                                                     <p class="product-name">
                                                         <a
-                                                            href="{{ URL::to('product-details/' . $product->id) }}">{{ $product->name }}</a>
+                                                        href="{{ route('product_details' ,['id'=> $detail->product->id]) }}">{{ $detail->product->name }}</a>
                                                     </p>
                                                 </td>
                                                 <td>
@@ -194,8 +168,6 @@
 
                                                     </span>
                                                 </td>
-                                            @endif
-                                        @endforeach
                                     </tr>
                                 @endforeach
                             </tbody>
@@ -204,7 +176,7 @@
                             <div class="col-sm-8">
                             </div>
                             <div class="totals col-sm-4">
-                                <h3>Shopping Cart Total</h3>
+                                <h3>Tổng giá trị đơn hàng</h3>
                                 <div class="inner">
                                     <table class="table shopping-cart-table-total" id="shopping-cart-totals-table">
                                         <colgroup>
@@ -214,7 +186,7 @@
                                         <tfoot>
                                             <tr>
                                                 <td colspan="1" class="a-left" style="">
-                                                    <strong>Grand Total</strong>
+                                                    <strong>Thành tiền</strong>
                                                 </td>
                                                 <td class="a-right" style="">
                                                     <strong>
@@ -225,7 +197,7 @@
                                         </tfoot>
                                         <tbody>
                                             <tr>
-                                                <td colspan="1" class="a-left" style=""> Subtotal </td>
+                                                <td colspan="1" class="a-left" style=""> Tổng cộng </td>
                                                 <td class="a-right" style="">
                                                     <span class="price">{{ $order->sub_total }}
                                                     </span>
@@ -233,7 +205,7 @@
                                             </tr>
                                             @if ($order->discount))
                                                 <tr>
-                                                    <td colspan="1" class="a-left" style=""> Discount </td>
+                                                    <td colspan="1" class="a-left" style=""> Giảm giá </td>
                                                     <td class="a-right" style="">
                                                         <span class="">-{{ $order->discount }}</span>
                                                     </td>
@@ -251,63 +223,9 @@
             </section>
         </section>
         <!-- footer -->
-        @include('admin.footer')
+        @include('components.admin.footer')
         <!-- / footer -->
     </section>
-
     <!--main content end-->
-    <script>
-        $(document).ready(function() {
-            $('#update_order_form').on('submit', (function(e) {
-                e.preventDefault();
-                $.ajaxSetup({
-                    headers: {
-                        'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
-                    }
-                });
-                $.ajax({
-                    url: "{{ url('administrator/order/update') }}",
-                    type: 'POST',
-                    data: new FormData(this),
-                    contentType: false,
-                    cache: false,
-                    processData: false,
-                    dataType: 'JSON',
-                    beforeSend: function() {},
-                    success: function(response) {
-                        console.log(response);
-                        if (response.error == true) {
-                            if (response.message.name != undefined) {
-                                $("#errorMessage").fadeIn(1000, function() {
-                                    $("#errorMessage").html(
-                                        "<div class='alert alert-danger' style='width:100%; margin:auto;'>" +
-                                        response.message.name[0] +
-                                        "</div>"
-                                    );
-                                    $("#errorMessage").fadeOut(10000);
-                                });
-                            }
-                            if (response.message != undefined) {
-                                $("#errorMessage").fadeIn(1000, function() {
-                                    $("#errorMessage").html(
-                                        "<div class='alert alert-danger' style='width:100%; margin:auto;'>" +
-                                        response.message[0] +
-                                        "</div>"
-                                    );
-                                    $("#errorMessage").fadeOut(10000);
-                                });
-                            }
-                        } else {
-                            alert("Update status of order.");
-                            window.location.href = "{{ url('administrator/order') }}";
-                        }
-                    },
-                    error: function(e) {
-                        console.log(e);
-                    }
-                });
-            }));
-        });
 
-    </script>
 @endsection

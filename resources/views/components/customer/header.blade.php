@@ -75,7 +75,7 @@
                     <div class="mini-cart">
                         <div data-toggle="dropdown" data-hover="dropdown" class="basket dropdown-toggle">
                             <a href="{{ route('cart.index') }}"> <i class="icon-cart"></i>
-                                <div class="cart-box"><span class="title">My Cart</span>
+                                <div class="cart-box"><span class="title">Giỏ hàng</span>
                                     @if (isset($count_cart) && $count_cart != null)
                                         <span id="cart-total">
                                             {{ $count_cart }}
@@ -155,7 +155,7 @@
                     </div>
             </div>
         @else
-            <div class="signup"><a title="Logout" href="{{ URL::to('/account/logout') }}"><span>Đăng xuất</span></a>
+            <div class="signup"><a title="Logout" href="{{ route('auth.customer.logout') }}"><span>Đăng xuất</span></a>
             </div>
             @endif
             <!-- End Top Cart -->

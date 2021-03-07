@@ -75,4 +75,15 @@ class Contact extends Model
         return $query;
     }
 
+    public function scopeRead($query)
+    {
+        $query->where('verified', 1);
+        return $query;
+    }
+    public function scopeUnread($query)
+    {
+        $query->where('verified', 0);
+        return $query;
+    }
+
 }

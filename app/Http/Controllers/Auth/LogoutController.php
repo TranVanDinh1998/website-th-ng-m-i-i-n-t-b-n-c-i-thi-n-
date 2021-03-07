@@ -1,13 +1,21 @@
 <?php
 
-    namespace App\Http\Controllers\Auth;
-    use App\Http\Controllers\Controller;
-    use Illuminate\Support\Facades\Auth;
+namespace App\Http\Controllers\Auth;
 
-    class LogoutController extends Controller {
-        public function index() {
-            Auth::logout();
-            return back();
-        }
-    } 
-?>
+use App\Http\Controllers\Controller;
+use Illuminate\Support\Facades\Auth;
+
+class LogoutController extends Controller
+{
+    public function customerLogout()
+    {
+        Auth::logout();
+        return back();
+    }
+    public function adminLogout()
+    {
+        Auth::guard('admin')->logout();
+        // session()->flush();
+        return back();
+    }
+}

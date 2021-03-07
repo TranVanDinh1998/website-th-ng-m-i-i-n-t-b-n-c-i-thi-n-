@@ -66,7 +66,7 @@ Smartphone Compatible web template, free webdesigns for Nokia, Samsung, LG, Sony
     <section id="container">
 
         <!--header start-->
-        {{-- @include('components.admin.header') --}}
+        @include('components.admin.header')
         <!--header end-->
 
         <!--sidebar start-->
